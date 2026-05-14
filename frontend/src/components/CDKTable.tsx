@@ -48,10 +48,36 @@ export default function CDKTable({
   const totalPages = Math.ceil(total / pageSize);
 
   const handleCopy = async (code: string, id: number) => {
-    await navigator.clipboard.writeText(code);
-    setCopiedId(id);
-    toast('已复制到剪贴板', 'success');
-    setTimeout(() => setCopiedId(null), 2000);
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        // 优先使用 Clipboard API (需要 HTTPS 或 localhost)
+        await navigator.clipboard.writeText(code);
+      } else {
+        // 降级方案：创建一个隐藏的 textarea 来复制
+        const textArea = document.createElement("textarea");
+        textArea.value = code;
+        // 使其不可见，但不能用 display: none，否则无法选中
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          document.execCommand('copy');
+        } catch (err) {
+          console.error('Fallback copy failed', err);
+          throw new Error('复制失败');
+        } finally {
+          textArea.remove();
+        }
+      }
+      setCopiedId(id);
+      toast('已复制到剪贴板', 'success');
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      toast('复制失败，请手动选择复制', 'error');
+    }
   };
 
   const handleDisableConfirm = (code: string) => {
@@ -75,7 +101,10 @@ export default function CDKTable({
 
   const formatDate = (d: string | null) => {
     if (!d) return '-';
-    return new Date(d).toLocaleString('zh-CN', {
+    // 后端返回的是 UTC 时间字符串 (例如 "2026-05-14T03:07:00")
+    // 我们需要将其显式解析为 UTC 时间，然后再转换为本地时间显示
+    const utcDate = new Date(d + 'Z'); 
+    return utcDate.toLocaleString('zh-CN', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

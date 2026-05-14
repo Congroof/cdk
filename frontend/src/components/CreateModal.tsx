@@ -43,9 +43,33 @@ export default function CreateModal({ open, onClose, onCreated }: Props) {
 
   const handleCopy = async () => {
     if (!result) return;
-    await navigator.clipboard.writeText(result.join('\n'));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const textToCopy = result.join('\n');
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(textToCopy);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = textToCopy;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          document.execCommand('copy');
+        } catch (err) {
+          console.error('Fallback copy failed', err);
+          throw new Error('复制失败');
+        } finally {
+          textArea.remove();
+        }
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast('复制失败，请手动选择复制', 'error');
+    }
   };
 
   const handleClose = () => {

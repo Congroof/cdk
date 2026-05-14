@@ -43,15 +43,23 @@ export default function ExportModal({ open, onClose }: Props) {
         return;
       }
 
+      const formatDate = (d: string | null) => {
+        if (!d) return '';
+        return new Date(d + 'Z').toLocaleString('zh-CN', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit'
+        });
+      };
+
       const rows = items.map((item) => ({
         'CDK 码': item.code,
         '状态': statusMap[item.status] || item.status,
         '有效时长': `${item.valid_duration} ${unitMap[item.valid_unit] || item.valid_unit}`,
         '机器码': item.machine_code || '',
         '备注': item.remark || '',
-        '创建时间': item.created_at || '',
-        '激活时间': item.activated_at || '',
-        '过期时间': item.expires_at || '',
+        '创建时间': formatDate(item.created_at),
+        '激活时间': formatDate(item.activated_at),
+        '过期时间': formatDate(item.expires_at),
       }));
 
       const ws = XLSX.utils.json_to_sheet(rows);
