@@ -64,6 +64,14 @@ pub async fn list(
     State(state): State<AppState>,
     Query(params): Query<ListQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    let now = Utc::now().naive_utc();
+    
+    // 动态更新已过期的 CDK 状态
+    sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE status = 'activated' AND expires_at IS NOT NULL AND expires_at < ?")
+        .bind(now)
+        .execute(&state.db)
+        .await?;
+
     let page = params.page.unwrap_or(1).max(1);
     let page_size = params.page_size.unwrap_or(10).min(50);
     let offset = (page - 1) * page_size;
@@ -177,7 +185,7 @@ pub async fn validate(
                         message: if machine_match {
                             "CDK 有效".to_string()
                         } else {
-                            "机器码不匹配".to_string()
+                            "机器码不匹配，但支持换绑".to_string()
                         },
                     }
                 }
@@ -249,7 +257,27 @@ pub async fn activate(
                     },
                 })));
             }
-            return Err(AppError::Conflict("CDK 已绑定到其他机器".to_string()));
+            
+            // 允许换绑：更新机器码
+            let result = sqlx::query(
+                "UPDATE cdkeys SET machine_code = ? WHERE id = ?"
+            )
+            .bind(&payload.machine_code)
+            .bind(cdk.id)
+            .execute(&state.db)
+            .await?;
+
+            if result.rows_affected() == 0 {
+                return Err(AppError::Conflict("CDK 状态已变更，请重试".to_string()));
+            }
+
+            return Ok(Json(serde_json::json!({
+                "success": true,
+                "data": {
+                    "message": "CDK 换绑成功",
+                    "expires_at": cdk.expires_at,
+                },
+            })));
         }
         CdkStatus::Unused => {}
     }
@@ -304,6 +332,14 @@ pub async fn disable(
 pub async fn stats(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    let now = Utc::now().naive_utc();
+    
+    // 动态更新已过期的 CDK 状态
+    sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE status = 'activated' AND expires_at IS NOT NULL AND expires_at < ?")
+        .bind(now)
+        .execute(&state.db)
+        .await?;
+
     let rows: Vec<(String, i64)> = sqlx::query_as(
         "SELECT status, COUNT(*) FROM cdkeys GROUP BY status"
     )
@@ -337,6 +373,14 @@ pub async fn export(
     State(state): State<AppState>,
     Query(params): Query<ExportQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    let now = Utc::now().naive_utc();
+    
+    // 动态更新已过期的 CDK 状态
+    sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE status = 'activated' AND expires_at IS NOT NULL AND expires_at < ?")
+        .bind(now)
+        .execute(&state.db)
+        .await?;
+
     let valid_statuses = ["unused", "activated", "expired", "disabled"];
     let has_status = params.status.as_ref()
         .is_some_and(|s| !s.is_empty() && valid_statuses.contains(&s.as_str()));
@@ -354,7 +398,7 @@ pub async fn export(
         format!(" WHERE {}", conditions.join(" AND "))
     };
 
-    let sql = format!("SELECT * FROM cdkeys{} ORDER BY created_at DESC", where_clause);
+    let sql = format!("SELECT * FROM cdkeys{} ORDER BY created_at DESC LIMIT 10000", where_clause);
     let mut query = sqlx::query_as::<_, CdkRow>(&sql);
 
     if has_status { query = query.bind(params.status.as_ref().unwrap()); }

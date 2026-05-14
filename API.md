@@ -59,7 +59,7 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 2 | POST | `/api/cdk/generate` | 是 | 批量生成 CDK |
 | 3 | GET | `/api/cdk/list` | 是 | 分页查询 CDK 列表 |
 | 4 | GET | `/api/cdk/stats` | 是 | CDK 统计概览 |
-| 5 | GET | `/api/cdk/export` | 是 | 导出 CDK 数据 |
+| 5 | GET | `/api/cdk/export` | 是 | 导出 CDK 数据（最大 10000 条） |
 | 6 | POST | `/api/cdk/validate` | 是 | 验证 CDK（管理端） |
 | 7 | POST | `/api/cdk/activate` | 是 | 激活 CDK（管理端） |
 | 8 | POST | `/api/cdk/disable` | 是 | 禁用 CDK |
@@ -272,7 +272,7 @@ curl -X GET http://localhost/api/cdk/stats \
 
 ### `GET /api/cdk/export`
 
-导出 CDK 数据，支持按状态和日期范围过滤，无分页限制。
+导出 CDK 数据，支持按状态和日期范围过滤，单次最多导出 10000 条以防止内存溢出。
 
 **请求头**：`Authorization: Bearer <token>`
 
@@ -377,7 +377,7 @@ curl -X POST http://localhost/api/client/validate \
 |----------|------|------|
 | `disabled` | `valid: false` | CDK 已被禁用 |
 | `unused` | `valid: true` | CDK 未使用，有效 |
-| `activated` | 看情况 | 若已过期 → 自动更新为 expired 并返回无效；若提供了 machine_code 且不匹配 → 无效；其他情况 → 有效 |
+| `activated` | 看情况 | 若已过期 → 自动更新为 expired 并返回无效；若提供了 machine_code 且不匹配 → 提示机器码不匹配，但支持换绑；其他情况 → 有效 |
 | `expired` | `valid: false` | CDK 已过期 |
 
 ---
@@ -447,7 +447,7 @@ curl -X POST http://localhost/api/client/activate \
 |----------|------|
 | `unused` | 激活成功，计算过期时间 = 当前时间 + valid_duration（根据 valid_unit 换算） |
 | `activated` + 同一机器 | 返回已激活信息（幂等） |
-| `activated` + 不同机器 | **409**：`"CDK 已绑定到其他机器"` |
+| `activated` + 不同机器 | **换绑成功**：更新机器码为新机器，返回成功信息 |
 | `activated` + 已过期 | 自动更新为 expired，返回已过期错误 |
 | `expired` | **400**：`"CDK 已过期"` |
 | `disabled` | **400**：`"CDK 已被禁用"` |
