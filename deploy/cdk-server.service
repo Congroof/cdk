@@ -1,0 +1,15 @@
+[Unit]
+Description=CDK Server
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/cdk-server/backend
+EnvironmentFile=/opt/cdk-server/backend/.env
+ExecStart=/opt/cdk-server/backend/cdk-server
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
