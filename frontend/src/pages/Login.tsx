@@ -21,7 +21,11 @@ export default function Login() {
         navigate('/', { replace: true });
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || '登录失败，请重试');
+      if (err.response && err.response.status === 401) {
+        setError(err.response.data?.error || '用户名或密码错误');
+      } else {
+        setError(err.response?.data?.error || '登录失败，请重试');
+      }
     } finally {
       setLoading(false);
     }
