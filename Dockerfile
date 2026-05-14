@@ -8,8 +8,16 @@ replace-with = "ustc"\n\
 [source.ustc]\n\
 registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"' > /usr/local/cargo/config.toml
 
-COPY backend/ .
-RUN cargo build --release
+# 优化：利用 Docker 缓存机制，先只拷贝 Cargo.toml 和 Cargo.lock (如果有) 编译依赖
+COPY backend/Cargo.toml backend/Cargo.lock* backend/
+RUN mkdir -p backend/src && echo "fn main() {}" > backend/src/main.rs && \
+    cd backend && cargo build --release && \
+    rm -rf src
+
+# 然后再拷贝真正的源代码进行编译
+COPY backend/ backend/
+# 触摸一下 main.rs 确保它的修改时间是最新的，触发重新编译
+RUN touch backend/src/main.rs && cd backend && cargo build --release
 
 FROM node:20-bookworm AS frontend-builder
 WORKDIR /build
