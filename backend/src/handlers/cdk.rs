@@ -160,10 +160,17 @@ pub async fn validate(
     State(state): State<AppState>,
     Json(payload): Json<ValidateRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    let admin_id: (i64,) = sqlx::query_as(
+        "SELECT id FROM users WHERE username = 'admin'"
+    )
+    .fetch_one(&state.db)
+    .await?;
+
     let row = sqlx::query_as::<_, CdkRow>(
-        "SELECT * FROM cdkeys WHERE code = ?"
+        "SELECT * FROM cdkeys WHERE code = ? AND (created_by = ? OR created_by IS NULL)"
     )
     .bind(&payload.code)
+    .bind(admin_id.0)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
@@ -242,10 +249,17 @@ pub async fn activate(
         return Err(AppError::BadRequest("激活码和机器码不能为空".to_string()));
     }
 
+    let admin_id: (i64,) = sqlx::query_as(
+        "SELECT id FROM users WHERE username = 'admin'"
+    )
+    .fetch_one(&state.db)
+    .await?;
+
     let row = sqlx::query_as::<_, CdkRow>(
-        "SELECT * FROM cdkeys WHERE code = ?"
+        "SELECT * FROM cdkeys WHERE code = ? AND (created_by = ? OR created_by IS NULL)"
     )
     .bind(&payload.code)
+    .bind(admin_id.0)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
