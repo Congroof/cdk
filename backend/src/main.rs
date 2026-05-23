@@ -50,10 +50,15 @@ async fn main() {
         .route("/client/validate", post(handlers::cdk::validate))
         .route("/client/activate", post(handlers::cdk::activate));
 
+    let user_client_routes = Router::new()
+        .route("/client/u/{username}/validate", post(handlers::cdk::user_validate))
+        .route("/client/u/{username}/activate", post(handlers::cdk::user_activate));
+
     let app = Router::new()
         .route("/api/auth/login", post(handlers::auth::login))
         .nest("/api", protected)
         .nest("/api", client_routes)
+        .nest("/api", user_client_routes)
         .layer(cors)
         .with_state(state);
 

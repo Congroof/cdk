@@ -16,7 +16,7 @@ pub struct Claims {
 
 pub async fn auth_middleware(
     State(state): State<AppState>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
     let auth_header = request
@@ -29,12 +29,14 @@ pub async fn auth_middleware(
         .strip_prefix("Bearer ")
         .ok_or_else(|| AppError::Unauthorized("认证格式错误".to_string()))?;
 
-    decode::<Claims>(
+    let token_data = decode::<Claims>(
         token,
         &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
         &Validation::default(),
     )
     .map_err(|_| AppError::Unauthorized("Token 无效或已过期".to_string()))?;
+
+    request.extensions_mut().insert(token_data.claims);
 
     Ok(next.run(request).await)
 }

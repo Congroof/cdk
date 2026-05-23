@@ -1,9 +1,10 @@
 use axum::extract::{Query, State};
-use axum::Json;
+use axum::{Extension, Json};
 use chrono::Utc;
 use rand::Rng;
 
 use crate::errors::AppError;
+use crate::middleware::auth::Claims;
 use crate::models::cdk::*;
 use crate::AppState;
 
@@ -25,6 +26,7 @@ fn generate_license_key() -> String {
 
 pub async fn generate(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<GenerateRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     if payload.count == 0 || payload.count > 100 {
@@ -39,16 +41,24 @@ pub async fn generate(
         return Err(AppError::BadRequest("单位须为 days 或 hours".to_string()));
     }
 
+    let user_id: (i64,) = sqlx::query_as(
+        "SELECT id FROM users WHERE username = ?"
+    )
+    .bind(&claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
     let mut codes = Vec::new();
     for _ in 0..payload.count {
         let code = generate_license_key();
         sqlx::query(
-            "INSERT INTO cdkeys (code, valid_duration, valid_unit, status, remark) VALUES (?, ?, ?, 'unused', ?)"
+            "INSERT INTO cdkeys (code, valid_duration, valid_unit, status, remark, created_by) VALUES (?, ?, ?, 'unused', ?, ?)"
         )
         .bind(&code)
         .bind(payload.valid_duration)
         .bind(unit)
         .bind(&payload.remark)
+        .bind(user_id.0)
         .execute(&state.db)
         .await?;
         codes.push(code);
@@ -62,13 +72,22 @@ pub async fn generate(
 
 pub async fn list(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
     Query(params): Query<ListQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let now = Utc::now().naive_utc();
+
+    let user_id: (i64,) = sqlx::query_as(
+        "SELECT id FROM users WHERE username = ?"
+    )
+    .bind(&claims.sub)
+    .fetch_one(&state.db)
+    .await?;
     
     // 动态更新已过期的 CDK 状态
-    sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE status = 'activated' AND expires_at IS NOT NULL AND expires_at < ?")
+    sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE status = 'activated' AND expires_at IS NOT NULL AND expires_at < ? AND created_by = ?")
         .bind(now)
+        .bind(user_id.0)
         .execute(&state.db)
         .await?;
 
@@ -81,12 +100,15 @@ pub async fn list(
         .is_some_and(|s| !s.is_empty() && valid_statuses.contains(&s.as_str()));
     let has_search = params.search.as_ref().is_some_and(|s| !s.is_empty());
 
-    let where_clause = match (has_status, has_search) {
-        (true, true) => " WHERE status = ? AND (code LIKE ? OR machine_code LIKE ? OR remark LIKE ?)",
-        (true, false) => " WHERE status = ?",
-        (false, true) => " WHERE (code LIKE ? OR machine_code LIKE ? OR remark LIKE ?)",
-        (false, false) => "",
-    };
+    let mut conditions = vec!["created_by = ?".to_string()];
+    if has_status {
+        conditions.push("status = ?".to_string());
+    }
+    if has_search {
+        conditions.push("(code LIKE ? OR machine_code LIKE ? OR remark LIKE ?)".to_string());
+    }
+
+    let where_clause = format!(" WHERE {}", conditions.join(" AND "));
 
     let count_sql = format!("SELECT COUNT(*) FROM cdkeys{}", where_clause);
     let data_sql = format!(
@@ -100,7 +122,7 @@ pub async fn list(
 
     macro_rules! bind_filters {
         ($q:expr) => {{
-            let mut q = $q;
+            let mut q = $q.bind(user_id.0);
             if has_status {
                 q = q.bind(params.status.as_ref().unwrap());
             }
@@ -310,12 +332,21 @@ pub async fn activate(
 
 pub async fn disable(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<DisableRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    let user_id: (i64,) = sqlx::query_as(
+        "SELECT id FROM users WHERE username = ?"
+    )
+    .bind(&claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
     let result = sqlx::query(
-        "UPDATE cdkeys SET status = 'disabled' WHERE code = ? AND status != 'disabled'"
+        "UPDATE cdkeys SET status = 'disabled' WHERE code = ? AND status != 'disabled' AND created_by = ?"
     )
     .bind(&payload.code)
+    .bind(user_id.0)
     .execute(&state.db)
     .await?;
 
@@ -331,18 +362,28 @@ pub async fn disable(
 
 pub async fn stats(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let now = Utc::now().naive_utc();
+
+    let user_id: (i64,) = sqlx::query_as(
+        "SELECT id FROM users WHERE username = ?"
+    )
+    .bind(&claims.sub)
+    .fetch_one(&state.db)
+    .await?;
     
     // 动态更新已过期的 CDK 状态
-    sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE status = 'activated' AND expires_at IS NOT NULL AND expires_at < ?")
+    sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE status = 'activated' AND expires_at IS NOT NULL AND expires_at < ? AND created_by = ?")
         .bind(now)
+        .bind(user_id.0)
         .execute(&state.db)
         .await?;
 
     let rows: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT status, COUNT(*) FROM cdkeys GROUP BY status"
+        "SELECT status, COUNT(*) FROM cdkeys WHERE created_by = ? GROUP BY status"
     )
+    .bind(user_id.0)
     .fetch_all(&state.db)
     .await?;
 
@@ -371,13 +412,22 @@ pub async fn stats(
 
 pub async fn export(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
     Query(params): Query<ExportQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let now = Utc::now().naive_utc();
+
+    let user_id: (i64,) = sqlx::query_as(
+        "SELECT id FROM users WHERE username = ?"
+    )
+    .bind(&claims.sub)
+    .fetch_one(&state.db)
+    .await?;
     
     // 动态更新已过期的 CDK 状态
-    sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE status = 'activated' AND expires_at IS NOT NULL AND expires_at < ?")
+    sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE status = 'activated' AND expires_at IS NOT NULL AND expires_at < ? AND created_by = ?")
         .bind(now)
+        .bind(user_id.0)
         .execute(&state.db)
         .await?;
 
@@ -387,19 +437,15 @@ pub async fn export(
     let has_from = params.date_from.as_ref().is_some_and(|s| !s.is_empty());
     let has_to = params.date_to.as_ref().is_some_and(|s| !s.is_empty());
 
-    let mut conditions = Vec::new();
-    if has_status { conditions.push("status = ?"); }
-    if has_from { conditions.push("created_at >= ?"); }
-    if has_to { conditions.push("created_at < DATE_ADD(?, INTERVAL 1 DAY)"); }
+    let mut conditions = vec!["created_by = ?".to_string()];
+    if has_status { conditions.push("status = ?".to_string()); }
+    if has_from { conditions.push("created_at >= ?".to_string()); }
+    if has_to { conditions.push("created_at < DATE_ADD(?, INTERVAL 1 DAY)".to_string()); }
 
-    let where_clause = if conditions.is_empty() {
-        String::new()
-    } else {
-        format!(" WHERE {}", conditions.join(" AND "))
-    };
+    let where_clause = format!(" WHERE {}", conditions.join(" AND "));
 
     let sql = format!("SELECT * FROM cdkeys{} ORDER BY created_at DESC LIMIT 10000", where_clause);
-    let mut query = sqlx::query_as::<_, CdkRow>(&sql);
+    let mut query = sqlx::query_as::<_, CdkRow>(&sql).bind(user_id.0);
 
     if has_status { query = query.bind(params.status.as_ref().unwrap()); }
     if has_from { query = query.bind(params.date_from.as_ref().unwrap()); }
@@ -411,5 +457,198 @@ pub async fn export(
     Ok(Json(serde_json::json!({
         "success": true,
         "data": { "items": items },
+    })))
+}
+
+pub async fn user_validate(
+    State(state): State<AppState>,
+    axum::extract::Path(username): axum::extract::Path<String>,
+    Json(payload): Json<ValidateRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let owner_id: (i64,) = sqlx::query_as(
+        "SELECT id FROM users WHERE username = ?"
+    )
+    .bind(&username)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
+
+    let row = sqlx::query_as::<_, CdkRow>(
+        "SELECT * FROM cdkeys WHERE code = ? AND created_by = ?"
+    )
+    .bind(&payload.code)
+    .bind(owner_id.0)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
+
+    let cdk = Cdk::from(row);
+
+    let response = match cdk.status {
+        CdkStatus::Disabled => ValidateResponse {
+            valid: false,
+            status: Some(CdkStatus::Disabled),
+            expires_at: cdk.expires_at,
+            message: "CDK 已被禁用".to_string(),
+        },
+        CdkStatus::Unused => ValidateResponse {
+            valid: true,
+            status: Some(CdkStatus::Unused),
+            expires_at: None,
+            message: "CDK 有效，尚未激活".to_string(),
+        },
+        CdkStatus::Activated => {
+            if let Some(expires_at) = cdk.expires_at {
+                if Utc::now().naive_utc() > expires_at {
+                    sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE id = ?")
+                        .bind(cdk.id)
+                        .execute(&state.db)
+                        .await?;
+                    ValidateResponse {
+                        valid: false,
+                        status: Some(CdkStatus::Expired),
+                        expires_at: Some(expires_at),
+                        message: "CDK 已过期".to_string(),
+                    }
+                } else {
+                    let machine_match = payload.machine_code.as_ref()
+                        .map(|mc| cdk.machine_code.as_ref() == Some(mc))
+                        .unwrap_or(true);
+                    ValidateResponse {
+                        valid: machine_match,
+                        status: Some(CdkStatus::Activated),
+                        expires_at: Some(expires_at),
+                        message: if machine_match {
+                            "CDK 有效".to_string()
+                        } else {
+                            "机器码不匹配，但支持换绑".to_string()
+                        },
+                    }
+                }
+            } else {
+                ValidateResponse {
+                    valid: true,
+                    status: Some(CdkStatus::Activated),
+                    expires_at: None,
+                    message: "CDK 有效".to_string(),
+                }
+            }
+        }
+        CdkStatus::Expired => ValidateResponse {
+            valid: false,
+            status: Some(CdkStatus::Expired),
+            expires_at: cdk.expires_at,
+            message: "CDK 已过期".to_string(),
+        },
+    };
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": response,
+    })))
+}
+
+pub async fn user_activate(
+    State(state): State<AppState>,
+    axum::extract::Path(username): axum::extract::Path<String>,
+    Json(payload): Json<ActivateRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if payload.code.is_empty() || payload.machine_code.is_empty() {
+        return Err(AppError::BadRequest("激活码和机器码不能为空".to_string()));
+    }
+
+    let owner_id: (i64,) = sqlx::query_as(
+        "SELECT id FROM users WHERE username = ?"
+    )
+    .bind(&username)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
+
+    let row = sqlx::query_as::<_, CdkRow>(
+        "SELECT * FROM cdkeys WHERE code = ? AND created_by = ?"
+    )
+    .bind(&payload.code)
+    .bind(owner_id.0)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
+
+    let hours = row.duration_as_hours();
+    let cdk = Cdk::from(row);
+
+    match cdk.status {
+        CdkStatus::Disabled => {
+            return Err(AppError::BadRequest("CDK 已被禁用".to_string()));
+        }
+        CdkStatus::Expired => {
+            return Err(AppError::BadRequest("CDK 已过期".to_string()));
+        }
+        CdkStatus::Activated => {
+            if let Some(expires_at) = cdk.expires_at {
+                if Utc::now().naive_utc() > expires_at {
+                    sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE id = ?")
+                        .bind(cdk.id)
+                        .execute(&state.db)
+                        .await?;
+                    return Err(AppError::BadRequest("CDK 已过期".to_string()));
+                }
+            }
+            if cdk.machine_code.as_deref() == Some(&payload.machine_code) {
+                return Ok(Json(serde_json::json!({
+                    "success": true,
+                    "data": {
+                        "message": "CDK 已激活于此机器",
+                        "expires_at": cdk.expires_at,
+                    },
+                })));
+            }
+            
+            let result = sqlx::query(
+                "UPDATE cdkeys SET machine_code = ? WHERE id = ?"
+            )
+            .bind(&payload.machine_code)
+            .bind(cdk.id)
+            .execute(&state.db)
+            .await?;
+
+            if result.rows_affected() == 0 {
+                return Err(AppError::Conflict("CDK 状态已变更，请重试".to_string()));
+            }
+
+            return Ok(Json(serde_json::json!({
+                "success": true,
+                "data": {
+                    "message": "CDK 换绑成功",
+                    "expires_at": cdk.expires_at,
+                },
+            })));
+        }
+        CdkStatus::Unused => {}
+    }
+
+    let now = Utc::now().naive_utc();
+    let expires_at = now + chrono::Duration::hours(hours);
+
+    let result = sqlx::query(
+        "UPDATE cdkeys SET status = 'activated', machine_code = ?, activated_at = ?, expires_at = ? WHERE id = ? AND status = 'unused'"
+    )
+    .bind(&payload.machine_code)
+    .bind(now)
+    .bind(expires_at)
+    .bind(cdk.id)
+    .execute(&state.db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::Conflict("CDK 状态已变更，请重试".to_string()));
+    }
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "message": "CDK 激活成功",
+            "expires_at": expires_at,
+        },
     })))
 }

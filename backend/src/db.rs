@@ -53,18 +53,39 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
             status ENUM('unused', 'activated', 'expired', 'disabled') DEFAULT 'unused',
             machine_code VARCHAR(256) NULL,
             remark VARCHAR(256) NULL,
+            created_by BIGINT NULL,
             created_at DATETIME DEFAULT NOW(),
             activated_at DATETIME NULL,
             expires_at DATETIME NULL,
             INDEX idx_code (code),
             INDEX idx_status (status),
-            INDEX idx_machine_code (machine_code)
+            INDEX idx_machine_code (machine_code),
+            INDEX idx_created_by (created_by)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
     )
     .execute(&pool)
     .await
     .expect("Failed to create cdkeys table");
 
+    // Auto-add created_by column for existing deployments
+    let _ = sqlx::query(
+        "ALTER TABLE cdkeys ADD COLUMN created_by BIGINT NULL AFTER remark"
+    )
+    .execute(&pool)
+    .await;
+
+    let _ = sqlx::query(
+        "ALTER TABLE cdkeys ADD INDEX idx_created_by (created_by)"
+    )
+    .execute(&pool)
+    .await;
+
+    // Assign existing CDKs to admin user
+    let _ = sqlx::query(
+        "UPDATE cdkeys SET created_by = (SELECT id FROM users WHERE username = 'admin') WHERE created_by IS NULL"
+    )
+    .execute(&pool)
+    .await;
 
     tracing::info!("Database '{}' ready", db_name);
     pool

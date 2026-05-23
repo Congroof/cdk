@@ -17,12 +17,14 @@ CREATE TABLE IF NOT EXISTS cdkeys (
     status ENUM('unused', 'activated', 'expired', 'disabled') DEFAULT 'unused',
     machine_code VARCHAR(256) NULL,
     remark VARCHAR(256) NULL,
+    created_by BIGINT NULL,
     created_at DATETIME DEFAULT NOW(),
     activated_at DATETIME NULL,
     expires_at DATETIME NULL,
     INDEX idx_code (code),
     INDEX idx_status (status),
-    INDEX idx_machine_code (machine_code)
+    INDEX idx_machine_code (machine_code),
+    INDEX idx_created_by (created_by)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 插入管理员账号（密码需使用 bcrypt 哈希）
