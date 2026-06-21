@@ -21,8 +21,9 @@ pub async fn usage_stats(
     .await?;
 
     let days = params.days.unwrap_or(30).max(1).min(365);
-    let since = Utc::now().naive_utc() - chrono::Duration::days(days as i64);
-    let today = Utc::now().naive_utc().date();
+    let now = Utc::now().naive_utc();
+    let since = now - chrono::Duration::days(days as i64);
+    let today_str = now.format("%Y-%m-%d").to_string();
 
     let (unique_machines,): (i64,) = sqlx::query_as(
         "SELECT COUNT(DISTINCT machine_code) FROM usage_logs WHERE created_by = ? AND created_at >= ?"
@@ -36,7 +37,7 @@ pub async fn usage_stats(
         "SELECT COUNT(DISTINCT machine_code) FROM usage_logs WHERE created_by = ? AND DATE(created_at) = ?"
     )
     .bind(user_id.0)
-    .bind(today)
+    .bind(&today_str)
     .fetch_one(&state.db)
     .await?;
 
@@ -48,28 +49,43 @@ pub async fn usage_stats(
     .fetch_one(&state.db)
     .await?;
 
-    let machines: Vec<MachineStats> = sqlx::query_as(
-        "SELECT machine_code, COUNT(DISTINCT cdk_code) as cdk_count, \
-         MIN(created_at) as first_seen, MAX(created_at) as last_seen, \
-         COUNT(DISTINCT DATE(created_at)) as active_days, COUNT(*) as total_requests \
+    let machine_rows: Vec<(String, i64, chrono::NaiveDateTime, chrono::NaiveDateTime, i64, i64)> = sqlx::query_as(
+        "SELECT machine_code, COUNT(DISTINCT cdk_code), \
+         MIN(created_at), MAX(created_at), \
+         COUNT(DISTINCT DATE(created_at)), COUNT(*) \
          FROM usage_logs WHERE created_by = ? AND created_at >= ? \
-         GROUP BY machine_code ORDER BY last_seen DESC"
+         GROUP BY machine_code ORDER BY MAX(created_at) DESC"
     )
     .bind(user_id.0)
     .bind(since)
     .fetch_all(&state.db)
     .await?;
 
-    let daily_trend: Vec<DailyTrend> = sqlx::query_as(
-        "SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as date, COUNT(*) as requests, \
-         COUNT(DISTINCT machine_code) as unique_machines \
+    let machines: Vec<MachineStats> = machine_rows.into_iter().map(|r| MachineStats {
+        machine_code: r.0,
+        cdk_count: r.1,
+        first_seen: r.2,
+        last_seen: r.3,
+        active_days: r.4,
+        total_requests: r.5,
+    }).collect();
+
+    let trend_rows: Vec<(String, i64, i64)> = sqlx::query_as(
+        "SELECT DATE_FORMAT(created_at, '%Y-%m-%d'), COUNT(*), \
+         COUNT(DISTINCT machine_code) \
          FROM usage_logs WHERE created_by = ? AND created_at >= ? \
-         GROUP BY DATE(created_at) ORDER BY date ASC"
+         GROUP BY DATE(created_at) ORDER BY DATE(created_at) ASC"
     )
     .bind(user_id.0)
     .bind(since)
     .fetch_all(&state.db)
     .await?;
+
+    let daily_trend: Vec<DailyTrend> = trend_rows.into_iter().map(|r| DailyTrend {
+        date: r.0,
+        requests: r.1,
+        unique_machines: r.2,
+    }).collect();
 
     Ok(Json(serde_json::json!({
         "success": true,
