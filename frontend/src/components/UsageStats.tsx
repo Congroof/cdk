@@ -455,7 +455,7 @@ export default function UsageStats() {
                               fontSize: '13px',
                               color: '#e2e8f0',
                             }}
-                            formatter={(value: number) => [formatDuration(value), '使用时长']}
+                            formatter={(value) => [formatDuration(value as number), '使用时长']}
                             labelFormatter={(label) => `日期: ${label}`}
                           />
                           <Bar dataKey="duration_minutes" name="使用时长(分钟)" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
