@@ -8,6 +8,83 @@ use crate::middleware::auth::Claims;
 use crate::models::cdk::*;
 use crate::AppState;
 
+pub async fn usage_stats(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(params): Query<UsageStatsQuery>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user_id: (i64,) = sqlx::query_as(
+        "SELECT id FROM users WHERE username = ?"
+    )
+    .bind(&claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    let days = params.days.unwrap_or(30).max(1).min(365);
+    let since = Utc::now().naive_utc() - chrono::Duration::days(days as i64);
+    let today = Utc::now().naive_utc().date();
+
+    let (unique_machines,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT machine_code) FROM usage_logs WHERE created_by = ? AND created_at >= ?"
+    )
+    .bind(user_id.0)
+    .bind(since)
+    .fetch_one(&state.db)
+    .await?;
+
+    let (active_today,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT machine_code) FROM usage_logs WHERE created_by = ? AND DATE(created_at) = ?"
+    )
+    .bind(user_id.0)
+    .bind(today)
+    .fetch_one(&state.db)
+    .await?;
+
+    let (total_requests,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM usage_logs WHERE created_by = ? AND created_at >= ?"
+    )
+    .bind(user_id.0)
+    .bind(since)
+    .fetch_one(&state.db)
+    .await?;
+
+    let machines: Vec<MachineStats> = sqlx::query_as(
+        "SELECT machine_code, COUNT(DISTINCT cdk_code) as cdk_count, \
+         MIN(created_at) as first_seen, MAX(created_at) as last_seen, \
+         COUNT(DISTINCT DATE(created_at)) as active_days, COUNT(*) as total_requests \
+         FROM usage_logs WHERE created_by = ? AND created_at >= ? \
+         GROUP BY machine_code ORDER BY last_seen DESC"
+    )
+    .bind(user_id.0)
+    .bind(since)
+    .fetch_all(&state.db)
+    .await?;
+
+    let daily_trend: Vec<DailyTrend> = sqlx::query_as(
+        "SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as date, COUNT(*) as requests, \
+         COUNT(DISTINCT machine_code) as unique_machines \
+         FROM usage_logs WHERE created_by = ? AND created_at >= ? \
+         GROUP BY DATE(created_at) ORDER BY date ASC"
+    )
+    .bind(user_id.0)
+    .bind(since)
+    .fetch_all(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "overview": {
+                "unique_machines": unique_machines,
+                "active_today": active_today,
+                "total_requests": total_requests,
+            },
+            "machines": machines,
+            "daily_trend": daily_trend,
+        },
+    })))
+}
+
 fn generate_license_key() -> String {
     let mut rng = rand::thread_rng();
     let chars: Vec<char> = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789abcdefghjkmnpqrstuvwxyz".chars().collect();
@@ -166,6 +243,17 @@ pub async fn validate(
     .fetch_one(&state.db)
     .await?;
 
+    if let Some(ref mc) = payload.machine_code {
+        let _ = sqlx::query(
+            "INSERT INTO usage_logs (machine_code, cdk_code, action, created_by) VALUES (?, ?, 'validate', ?)"
+        )
+        .bind(mc)
+        .bind(&payload.code)
+        .bind(admin_id.0)
+        .execute(&state.db)
+        .await;
+    }
+
     let row = sqlx::query_as::<_, CdkRow>(
         "SELECT * FROM cdkeys WHERE code = ? AND (created_by = ? OR created_by IS NULL)"
     )
@@ -254,6 +342,15 @@ pub async fn activate(
     )
     .fetch_one(&state.db)
     .await?;
+
+    let _ = sqlx::query(
+        "INSERT INTO usage_logs (machine_code, cdk_code, action, created_by) VALUES (?, ?, 'activate', ?)"
+    )
+    .bind(&payload.machine_code)
+    .bind(&payload.code)
+    .bind(admin_id.0)
+    .execute(&state.db)
+    .await;
 
     let row = sqlx::query_as::<_, CdkRow>(
         "SELECT * FROM cdkeys WHERE code = ? AND (created_by = ? OR created_by IS NULL)"
@@ -487,6 +584,17 @@ pub async fn user_validate(
     .await?
     .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
 
+    if let Some(ref mc) = payload.machine_code {
+        let _ = sqlx::query(
+            "INSERT INTO usage_logs (machine_code, cdk_code, action, created_by) VALUES (?, ?, 'validate', ?)"
+        )
+        .bind(mc)
+        .bind(&payload.code)
+        .bind(owner_id.0)
+        .execute(&state.db)
+        .await;
+    }
+
     let row = sqlx::query_as::<_, CdkRow>(
         "SELECT * FROM cdkeys WHERE code = ? AND created_by = ?"
     )
@@ -578,6 +686,15 @@ pub async fn user_activate(
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
+
+    let _ = sqlx::query(
+        "INSERT INTO usage_logs (machine_code, cdk_code, action, created_by) VALUES (?, ?, 'activate', ?)"
+    )
+    .bind(&payload.machine_code)
+    .bind(&payload.code)
+    .bind(owner_id.0)
+    .execute(&state.db)
+    .await;
 
     let row = sqlx::query_as::<_, CdkRow>(
         "SELECT * FROM cdkeys WHERE code = ? AND created_by = ?"

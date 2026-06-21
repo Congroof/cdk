@@ -26,3 +26,30 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
 }
+
+export interface UsageOverview {
+  unique_machines: number;
+  active_today: number;
+  total_requests: number;
+}
+
+export interface MachineStats {
+  machine_code: string;
+  cdk_count: number;
+  first_seen: string;
+  last_seen: string;
+  active_days: number;
+  total_requests: number;
+}
+
+export interface DailyTrend {
+  date: string;
+  requests: number;
+  unique_machines: number;
+}
+
+export interface UsageStatsData {
+  overview: UsageOverview;
+  machines: MachineStats[];
+  daily_trend: DailyTrend[];
+}

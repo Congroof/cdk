@@ -87,6 +87,23 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
     .execute(&pool)
     .await;
 
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS usage_logs (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            machine_code VARCHAR(256) NOT NULL,
+            cdk_code VARCHAR(64) NOT NULL,
+            action VARCHAR(20) NOT NULL,
+            created_by BIGINT NULL,
+            created_at DATETIME DEFAULT NOW(),
+            INDEX idx_ul_machine (machine_code),
+            INDEX idx_ul_created_at (created_at),
+            INDEX idx_ul_created_by (created_by)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create usage_logs table");
+
     tracing::info!("Database '{}' ready", db_name);
     pool
 }

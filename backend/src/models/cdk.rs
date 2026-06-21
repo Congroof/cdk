@@ -124,3 +124,32 @@ pub struct ExportQuery {
     pub date_from: Option<String>,
     pub date_to: Option<String>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct UsageStatsQuery {
+    pub days: Option<u32>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UsageOverview {
+    pub unique_machines: i64,
+    pub active_today: i64,
+    pub total_requests: i64,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct MachineStats {
+    pub machine_code: String,
+    pub cdk_count: i64,
+    pub first_seen: chrono::NaiveDateTime,
+    pub last_seen: chrono::NaiveDateTime,
+    pub active_days: i64,
+    pub total_requests: i64,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct DailyTrend {
+    pub date: String,
+    pub requests: i64,
+    pub unique_machines: i64,
+}

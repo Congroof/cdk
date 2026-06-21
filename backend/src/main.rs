@@ -38,6 +38,7 @@ async fn main() {
         .route("/cdk/list", get(handlers::cdk::list))
         .route("/cdk/stats", get(handlers::cdk::stats))
         .route("/cdk/export", get(handlers::cdk::export))
+        .route("/cdk/usage-stats", get(handlers::cdk::usage_stats))
         .route("/cdk/validate", post(handlers::cdk::validate))
         .route("/cdk/activate", post(handlers::cdk::activate))
         .route("/cdk/disable", post(handlers::cdk::disable))
