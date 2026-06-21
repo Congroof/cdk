@@ -212,7 +212,7 @@ export default function UsageStats() {
                   fontSize: '13px',
                   color: '#e2e8f0',
                 }}
-                labelFormatter={(label: string) => `日期: ${label}`}
+                labelFormatter={(label) => `日期: ${label}`}
               />
               <Legend
                 wrapperStyle={{ fontSize: '12px', color: '#94a3b8' }}
