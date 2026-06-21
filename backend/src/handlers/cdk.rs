@@ -74,7 +74,7 @@ pub async fn usage_stats(
         "SELECT DATE_FORMAT(created_at, '%Y-%m-%d'), COUNT(*), \
          COUNT(DISTINCT machine_code) \
          FROM usage_logs WHERE created_by = ? AND created_at >= ? \
-         GROUP BY DATE(created_at) ORDER BY DATE(created_at) ASC"
+         GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d') ORDER BY DATE_FORMAT(created_at, '%Y-%m-%d') ASC"
     )
     .bind(user_id.0)
     .bind(since)
