@@ -104,6 +104,21 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
     .await
     .expect("Failed to create usage_logs table");
 
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS banned_machines (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            machine_code VARCHAR(256) NOT NULL,
+            reason VARCHAR(512) NULL,
+            created_by BIGINT NOT NULL,
+            created_at DATETIME DEFAULT NOW(),
+            UNIQUE INDEX idx_bm_unique (machine_code, created_by),
+            INDEX idx_bm_created_by (created_by)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create banned_machines table");
+
     tracing::info!("Database '{}' ready", db_name);
     pool
 }

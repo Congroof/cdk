@@ -128,6 +128,13 @@ pub struct ExportQuery {
 #[derive(Debug, Deserialize)]
 pub struct UsageStatsQuery {
     pub days: Option<u32>,
+    pub search: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MachineUsageQuery {
+    pub machine_code: String,
+    pub days: Option<u32>,
 }
 
 #[derive(Debug, Serialize)]

@@ -53,3 +53,31 @@ export interface UsageStatsData {
   machines: MachineStats[];
   daily_trend: DailyTrend[];
 }
+
+export interface MachineDailyUsage {
+  date: string;
+  requests: number;
+  first_active: string;
+  last_active: string;
+  duration_minutes: number;
+}
+
+export interface MachineCdkUsage {
+  code: string;
+  requests: number;
+  last_used: string;
+}
+
+export interface MachineUsageDetail {
+  machine_code: string;
+  daily_usage: MachineDailyUsage[];
+  cdks: MachineCdkUsage[];
+}
+
+export interface BannedMachine {
+  id: number;
+  machine_code: string;
+  reason: string | null;
+  created_by: number;
+  created_at: string;
+}

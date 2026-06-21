@@ -39,9 +39,13 @@ async fn main() {
         .route("/cdk/stats", get(handlers::cdk::stats))
         .route("/cdk/export", get(handlers::cdk::export))
         .route("/cdk/usage-stats", get(handlers::cdk::usage_stats))
+        .route("/cdk/machine-usage", get(handlers::cdk::machine_usage))
         .route("/cdk/validate", post(handlers::cdk::validate))
         .route("/cdk/activate", post(handlers::cdk::activate))
         .route("/cdk/disable", post(handlers::cdk::disable))
+        .route("/banned/list", get(handlers::banned::list))
+        .route("/banned/ban", post(handlers::banned::ban))
+        .route("/banned/unban", post(handlers::banned::unban))
         .route_layer(axum_mw::from_fn_with_state(
             state.clone(),
             middleware::auth::auth_middleware,

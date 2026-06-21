@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, RefreshCw, Search, Filter, Download, KeyRound, BarChart3 } from 'lucide-react';
+import { Plus, RefreshCw, Search, Filter, Download, KeyRound, BarChart3, ShieldBan } from 'lucide-react';
 import Layout from '../components/Layout';
 import CDKTable from '../components/CDKTable';
 import CreateModal from '../components/CreateModal';
 import ExportModal from '../components/ExportModal';
 import UsageStats from '../components/UsageStats';
+import BannedMachines from '../components/BannedMachines';
 import api from '../api';
 import type { Cdk } from '../types';
 
-type TabKey = 'cdk' | 'stats';
+type TabKey = 'cdk' | 'stats' | 'banned';
 
 const statusFilters: { value: string; label: string }[] = [
   { value: '', label: '全部' },
@@ -116,6 +117,17 @@ export default function Dashboard() {
           <BarChart3 className="w-4 h-4" />
           使用统计
         </button>
+        <button
+          onClick={() => setActiveTab('banned')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+            activeTab === 'banned'
+              ? 'bg-gradient-to-r from-red-500/15 to-orange-500/15 text-red-400 shadow-sm'
+              : 'text-slate-400 hover:text-slate-300 hover:bg-white/5'
+          }`}
+        >
+          <ShieldBan className="w-4 h-4" />
+          封禁管理
+        </button>
       </div>
 
       {activeTab === 'cdk' ? (
@@ -221,8 +233,10 @@ export default function Dashboard() {
             onClose={() => setShowExport(false)}
           />
         </>
-      ) : (
+      ) : activeTab === 'stats' ? (
         <UsageStats />
+      ) : (
+        <BannedMachines />
       )}
     </Layout>
   );

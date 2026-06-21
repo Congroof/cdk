@@ -49,17 +49,37 @@ pub async fn usage_stats(
     .fetch_one(&state.db)
     .await?;
 
-    let machine_rows: Vec<(String, i64, chrono::NaiveDateTime, chrono::NaiveDateTime, i64, i64)> = sqlx::query_as(
-        "SELECT machine_code, COUNT(DISTINCT cdk_code), \
-         MIN(created_at), MAX(created_at), \
-         COUNT(DISTINCT DATE(created_at)), COUNT(*) \
-         FROM usage_logs WHERE created_by = ? AND created_at >= ? \
-         GROUP BY machine_code ORDER BY MAX(created_at) DESC"
-    )
-    .bind(user_id.0)
-    .bind(since)
-    .fetch_all(&state.db)
-    .await?;
+    let has_search = params.search.as_ref().is_some_and(|s| !s.is_empty());
+    let search_pattern = params.search.as_ref()
+        .map(|s| format!("%{}%", s))
+        .unwrap_or_default();
+
+    let machine_rows: Vec<(String, i64, chrono::NaiveDateTime, chrono::NaiveDateTime, i64, i64)> = if has_search {
+        sqlx::query_as(
+            "SELECT machine_code, COUNT(DISTINCT cdk_code), \
+             MIN(created_at), MAX(created_at), \
+             COUNT(DISTINCT DATE(created_at)), COUNT(*) \
+             FROM usage_logs WHERE created_by = ? AND created_at >= ? AND machine_code LIKE ? \
+             GROUP BY machine_code ORDER BY MAX(created_at) DESC"
+        )
+        .bind(user_id.0)
+        .bind(since)
+        .bind(&search_pattern)
+        .fetch_all(&state.db)
+        .await?
+    } else {
+        sqlx::query_as(
+            "SELECT machine_code, COUNT(DISTINCT cdk_code), \
+             MIN(created_at), MAX(created_at), \
+             COUNT(DISTINCT DATE(created_at)), COUNT(*) \
+             FROM usage_logs WHERE created_by = ? AND created_at >= ? \
+             GROUP BY machine_code ORDER BY MAX(created_at) DESC"
+        )
+        .bind(user_id.0)
+        .bind(since)
+        .fetch_all(&state.db)
+        .await?
+    };
 
     let machines: Vec<MachineStats> = machine_rows.into_iter().map(|r| MachineStats {
         machine_code: r.0,
@@ -97,6 +117,74 @@ pub async fn usage_stats(
             },
             "machines": machines,
             "daily_trend": daily_trend,
+        },
+    })))
+}
+
+pub async fn machine_usage(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(params): Query<MachineUsageQuery>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user_id: (i64,) = sqlx::query_as(
+        "SELECT id FROM users WHERE username = ?"
+    )
+    .bind(&claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    let days = params.days.unwrap_or(30).max(1).min(365);
+    let since = Utc::now().naive_utc() - chrono::Duration::days(days as i64);
+
+    let daily_rows: Vec<(String, i64, chrono::NaiveDateTime, chrono::NaiveDateTime)> = sqlx::query_as(
+        "SELECT DATE_FORMAT(created_at, '%Y-%m-%d'), COUNT(*), \
+         MIN(created_at), MAX(created_at) \
+         FROM usage_logs WHERE created_by = ? AND machine_code = ? AND created_at >= ? \
+         GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d') \
+         ORDER BY DATE_FORMAT(created_at, '%Y-%m-%d') DESC"
+    )
+    .bind(user_id.0)
+    .bind(&params.machine_code)
+    .bind(since)
+    .fetch_all(&state.db)
+    .await?;
+
+    let daily_usage: Vec<serde_json::Value> = daily_rows.into_iter().map(|r| {
+        let duration_minutes = (r.3 - r.2).num_minutes();
+        serde_json::json!({
+            "date": r.0,
+            "requests": r.1,
+            "first_active": r.2,
+            "last_active": r.3,
+            "duration_minutes": duration_minutes,
+        })
+    }).collect();
+
+    let cdk_rows: Vec<(String, i64, chrono::NaiveDateTime)> = sqlx::query_as(
+        "SELECT cdk_code, COUNT(*), MAX(created_at) \
+         FROM usage_logs WHERE created_by = ? AND machine_code = ? AND created_at >= ? \
+         GROUP BY cdk_code ORDER BY MAX(created_at) DESC"
+    )
+    .bind(user_id.0)
+    .bind(&params.machine_code)
+    .bind(since)
+    .fetch_all(&state.db)
+    .await?;
+
+    let cdks: Vec<serde_json::Value> = cdk_rows.into_iter().map(|r| {
+        serde_json::json!({
+            "code": r.0,
+            "requests": r.1,
+            "last_used": r.2,
+        })
+    }).collect();
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "machine_code": params.machine_code,
+            "daily_usage": daily_usage,
+            "cdks": cdks,
         },
     })))
 }
@@ -260,6 +348,17 @@ pub async fn validate(
     .await?;
 
     if let Some(ref mc) = payload.machine_code {
+        let banned: Option<(i64,)> = sqlx::query_as(
+            "SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?"
+        )
+        .bind(mc)
+        .bind(admin_id.0)
+        .fetch_optional(&state.db)
+        .await?;
+        if banned.is_some() {
+            return Err(AppError::BadRequest("该机器码已被封禁，无法验证".to_string()));
+        }
+
         let _ = sqlx::query(
             "INSERT INTO usage_logs (machine_code, cdk_code, action, created_by) VALUES (?, ?, 'validate', ?)"
         )
@@ -358,6 +457,17 @@ pub async fn activate(
     )
     .fetch_one(&state.db)
     .await?;
+
+    let banned: Option<(i64,)> = sqlx::query_as(
+        "SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?"
+    )
+    .bind(&payload.machine_code)
+    .bind(admin_id.0)
+    .fetch_optional(&state.db)
+    .await?;
+    if banned.is_some() {
+        return Err(AppError::BadRequest("该机器码已被封禁，无法激活".to_string()));
+    }
 
     let _ = sqlx::query(
         "INSERT INTO usage_logs (machine_code, cdk_code, action, created_by) VALUES (?, ?, 'activate', ?)"
@@ -601,6 +711,17 @@ pub async fn user_validate(
     .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
 
     if let Some(ref mc) = payload.machine_code {
+        let banned: Option<(i64,)> = sqlx::query_as(
+            "SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?"
+        )
+        .bind(mc)
+        .bind(owner_id.0)
+        .fetch_optional(&state.db)
+        .await?;
+        if banned.is_some() {
+            return Err(AppError::BadRequest("该机器码已被封禁，无法验证".to_string()));
+        }
+
         let _ = sqlx::query(
             "INSERT INTO usage_logs (machine_code, cdk_code, action, created_by) VALUES (?, ?, 'validate', ?)"
         )
@@ -702,6 +823,17 @@ pub async fn user_activate(
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
+
+    let banned: Option<(i64,)> = sqlx::query_as(
+        "SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?"
+    )
+    .bind(&payload.machine_code)
+    .bind(owner_id.0)
+    .fetch_optional(&state.db)
+    .await?;
+    if banned.is_some() {
+        return Err(AppError::BadRequest("该机器码已被封禁，无法激活".to_string()));
+    }
 
     let _ = sqlx::query(
         "INSERT INTO usage_logs (machine_code, cdk_code, action, created_by) VALUES (?, ?, 'activate', ?)"
