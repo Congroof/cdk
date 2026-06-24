@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Ban, Copy, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Ban, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Cdk, CdkStatus } from '../types';
 import api from '../api';
 import { useToast } from './Toast';
+import { formatDate } from '../utils/format';
+import CopyButton from './CopyButton';
 
 const statusConfig: Record<CdkStatus, { label: string; className: string }> = {
   unused: {
@@ -41,44 +43,10 @@ export default function CDKTable({
   onRefresh,
 }: Props) {
   const { toast } = useToast();
-  const [copiedId, setCopiedId] = useState<number | null>(null);
   const [disabling, setDisabling] = useState<number | null>(null);
   const [confirmCode, setConfirmCode] = useState<string | null>(null);
 
   const totalPages = Math.ceil(total / pageSize);
-
-  const handleCopy = async (code: string, id: number) => {
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        // 优先使用 Clipboard API (需要 HTTPS 或 localhost)
-        await navigator.clipboard.writeText(code);
-      } else {
-        // 降级方案：创建一个隐藏的 textarea 来复制
-        const textArea = document.createElement("textarea");
-        textArea.value = code;
-        // 使其不可见，但不能用 display: none，否则无法选中
-        textArea.style.position = "fixed";
-        textArea.style.left = "-999999px";
-        textArea.style.top = "-999999px";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {
-          document.execCommand('copy');
-        } catch (err) {
-          console.error('Fallback copy failed', err);
-          throw new Error('复制失败');
-        } finally {
-          textArea.remove();
-        }
-      }
-      setCopiedId(id);
-      toast('已复制到剪贴板', 'success');
-      setTimeout(() => setCopiedId(null), 2000);
-    } catch (err) {
-      toast('复制失败，请手动选择复制', 'error');
-    }
-  };
 
   const handleDisableConfirm = (code: string) => {
     setConfirmCode(code);
@@ -97,20 +65,6 @@ export default function CDKTable({
       setDisabling(null);
       setConfirmCode(null);
     }
-  };
-
-  const formatDate = (d: string | null) => {
-    if (!d) return '-';
-    // 后端返回的是 UTC 时间字符串 (例如 "2026-05-14T03:07:00")
-    // 我们需要将其显式解析为 UTC 时间，然后再转换为本地时间显示
-    const utcDate = new Date(d + 'Z'); 
-    return utcDate.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
   };
 
   return (
@@ -147,16 +101,7 @@ export default function CDKTable({
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <code className="font-mono text-white">{item.code}</code>
-                        <button
-                          onClick={() => handleCopy(item.code, item.id)}
-                          className="p-1 hover:bg-white/5 rounded transition-colors"
-                        >
-                          {copiedId === item.id ? (
-                            <Check className="w-3.5 h-3.5 text-green-400" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5 text-slate-500" />
-                          )}
-                        </button>
+                        <CopyButton text={item.code} size="md" />
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -175,16 +120,7 @@ export default function CDKTable({
                           <code className="text-xs text-slate-400 bg-white/5 px-2 py-1 rounded font-mono max-w-[160px] truncate block">
                             {item.machine_code}
                           </code>
-                          <button
-                            onClick={() => handleCopy(item.machine_code!, item.id + 100000)}
-                            className="p-1 hover:bg-white/5 rounded transition-colors shrink-0"
-                          >
-                            {copiedId === item.id + 100000 ? (
-                              <Check className="w-3 h-3 text-green-400" />
-                            ) : (
-                              <Copy className="w-3 h-3 text-slate-500" />
-                            )}
-                          </button>
+                          <CopyButton text={item.machine_code} />
                           <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-10">
                             <div className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono shadow-xl max-w-xs break-all">
                               {item.machine_code}
