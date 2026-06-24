@@ -1,12 +1,33 @@
 # Frontend Development Guidelines
 
-> Best practices for frontend development in this project.
+> Coding conventions for the CDK Server frontend (React 19 + TypeScript + Vite + TailwindCSS).
 
 ---
 
-## Overview
+## Tech Stack
 
-This directory contains guidelines for frontend development. Fill in each file with your project's specific conventions.
+- **Framework**: React 19 (function components only)
+- **Language**: TypeScript ~6.0 (strict)
+- **Build**: Vite 8
+- **Styling**: TailwindCSS 4 (dark theme, utility-first)
+- **Routing**: react-router-dom v7
+- **HTTP**: Axios with request/response interceptors
+- **Icons**: lucide-react
+- **Charts**: recharts
+- **Excel**: xlsx
+
+---
+
+## Pre-Development Checklist
+
+Before writing frontend code, read these guideline files:
+
+1. [Directory Structure](./directory-structure.md) — file layout, where to add new code
+2. [Component Guidelines](./component-guidelines.md) — component patterns, styling, modals, toasts
+3. [Hook Guidelines](./hook-guidelines.md) — data fetching, custom hook patterns
+4. [State Management](./state-management.md) — local state, context, auth state
+5. [Type Safety](./type-safety.md) — TypeScript conventions, type organization
+6. [Quality Guidelines](./quality-guidelines.md) — linting, build, dependency rules
 
 ---
 
@@ -14,26 +35,20 @@ This directory contains guidelines for frontend development. Fill in each file w
 
 | Guide | Description | Status |
 |-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | Module organization and file layout | To fill |
-| [Component Guidelines](./component-guidelines.md) | Component patterns, props, composition | To fill |
-| [Hook Guidelines](./hook-guidelines.md) | Custom hooks, data fetching patterns | To fill |
-| [State Management](./state-management.md) | Local state, global state, server state | To fill |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
-| [Type Safety](./type-safety.md) | Type patterns, validation | To fill |
+| [Directory Structure](./directory-structure.md) | Component/page/hook organization | Filled |
+| [Component Guidelines](./component-guidelines.md) | Component patterns, props, styling | Filled |
+| [Hook Guidelines](./hook-guidelines.md) | Custom hooks, data fetching patterns | Filled |
+| [State Management](./state-management.md) | useState, context, no external lib | Filled |
+| [Type Safety](./type-safety.md) | TypeScript conventions, type organization | Filled |
+| [Quality Guidelines](./quality-guidelines.md) | Linting, build commands, anti-patterns | Filled |
 
 ---
 
-## How to Fill These Guidelines
+## Quick Reference
 
-For each guideline file:
-
-1. Document your project's **actual conventions** (not ideals)
-2. Include **code examples** from your codebase
-3. List **forbidden patterns** and why
-4. Add **common mistakes** your team has made
-
-The goal is to help AI assistants and new team members understand how YOUR project works.
-
----
-
-**Language**: All documentation should be written in **English**.
+- All UI text is in **Chinese**
+- Dark theme: slate background, glass-morphism cards, gradient accents
+- API calls: `api.get/post` from `src/api/index.ts`
+- Types: import from `src/types/index.ts`
+- Notifications: `useToast()` hook → `toast('message', 'success'|'error'|'info')`
+- Auth: localStorage token, axios interceptor auto-adds Bearer header

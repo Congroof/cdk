@@ -1,51 +1,92 @@
 # Quality Guidelines
 
-> Code quality standards for backend development.
+> Code standards and quality expectations for the CDK Server backend.
 
 ---
 
-## Overview
+## Build & Check Commands
 
-<!--
-Document your project's quality standards here.
-
-Questions to answer:
-- What patterns are forbidden?
-- What linting rules do you enforce?
-- What are your testing requirements?
-- What code review standards apply?
--->
-
-(To be filled by the team)
+```bash
+cd backend
+cargo build          # Compile
+cargo clippy         # Lint (warnings as errors in CI)
+cargo fmt --check    # Format check
+```
 
 ---
 
-## Forbidden Patterns
+## Code Style
 
-<!-- Patterns that should never be used and why -->
+- **Edition**: Rust 2021
+- **Formatting**: `rustfmt` default settings
+- **Linting**: Clippy default lints
+- **Imports**: Group by stdlib → external crates → local modules, separated by blank lines
 
-(To be filled by the team)
+```rust
+use axum::extract::{Query, State};
+use axum::Json;
+use chrono::Utc;
 
----
-
-## Required Patterns
-
-<!-- Patterns that must always be used -->
-
-(To be filled by the team)
-
----
-
-## Testing Requirements
-
-<!-- What level of testing is expected -->
-
-(To be filled by the team)
+use crate::errors::AppError;
+use crate::models::cdk::*;
+use crate::AppState;
+```
 
 ---
 
-## Code Review Checklist
+## Handler Function Signature
 
-<!-- What reviewers should check -->
+All handlers follow the same pattern:
 
-(To be filled by the team)
+```rust
+pub async fn handler_name(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,    // only for protected routes
+    Json(payload): Json<RequestType>,        // for POST
+    Query(params): Query<QueryType>,         // for GET with params
+) -> Result<Json<serde_json::Value>, AppError> {
+    // ...
+}
+```
+
+---
+
+## Response Envelope
+
+**Always** wrap responses in the standard envelope:
+
+```rust
+Ok(Json(serde_json::json!({
+    "success": true,
+    "data": { /* ... */ },
+})))
+```
+
+Never return bare data or non-standard structures.
+
+---
+
+## Testing
+
+- Currently **no automated tests** in the project
+- Verification is done manually via API calls (curl / frontend)
+- When adding tests: use `#[tokio::test]` with a test database
+
+---
+
+## Dependency Policy
+
+- Keep dependencies minimal — only add crates that solve a real problem
+- Pin major versions in Cargo.toml (e.g., `axum = "0.8"`, not `axum = "*"`)
+- Prefer well-maintained, widely-used crates from the Rust ecosystem
+
+---
+
+## Anti-Patterns
+
+- Do NOT use `.unwrap()` in handler code — always propagate errors with `?`
+- Do NOT use `expect()` in handlers (only acceptable in main/startup code for required config)
+- Do NOT introduce `unsafe` code
+- Do NOT add unused dependencies
+- Do NOT use `clone()` unnecessarily — prefer references where possible
+- Do NOT mix Chinese and English in the same error message string
