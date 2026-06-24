@@ -60,7 +60,7 @@ pub async fn usage_stats(
              MIN(created_at), MAX(created_at), \
              COUNT(DISTINCT DATE(created_at)), COUNT(*) \
              FROM usage_logs WHERE created_by = ? AND created_at >= ? AND machine_code LIKE ? \
-             GROUP BY machine_code ORDER BY MAX(created_at) DESC"
+             GROUP BY machine_code ORDER BY MAX(created_at) DESC LIMIT 200"
         )
         .bind(user_id.0)
         .bind(since)
@@ -73,7 +73,7 @@ pub async fn usage_stats(
              MIN(created_at), MAX(created_at), \
              COUNT(DISTINCT DATE(created_at)), COUNT(*) \
              FROM usage_logs WHERE created_by = ? AND created_at >= ? \
-             GROUP BY machine_code ORDER BY MAX(created_at) DESC"
+             GROUP BY machine_code ORDER BY MAX(created_at) DESC LIMIT 200"
         )
         .bind(user_id.0)
         .bind(since)
