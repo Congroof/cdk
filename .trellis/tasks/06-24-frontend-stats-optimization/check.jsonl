@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend conventions to verify compliance"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Component patterns for quality check"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Build/lint requirements"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend quality standards for the LIMIT change"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Verify no remaining duplication"}

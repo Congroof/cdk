@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend spec overview and pre-development checklist"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Where to place new files (utils/, components/)"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Component patterns, props conventions, styling rules"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Data fetching patterns used in the project"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "TypeScript conventions for new types/interfaces"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec overview for the usage_stats LIMIT change"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Guidance on extracting shared code patterns"}
