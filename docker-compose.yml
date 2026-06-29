@@ -23,6 +23,8 @@ services:
     build: .
     ports:
       - "80:80"
+    volumes:
+      - ./skinforge-updates:/opt/skinforge-updates
     environment:
       - DATABASE_URL=mysql://cdk:cdk-db-password-2026@mysql:3306/cdk_server
       - JWT_SECRET=cdk-server-jwt-secret-key-2026

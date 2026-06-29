@@ -138,9 +138,45 @@ docker-compose logs -f cdk-server
 
 ---
 
-## 6. 日常维护
+## 6. SkinForge 在线更新文件
 
-### 6.1 更新代码并重新部署
+Docker 镜像内的 Nginx 已预留 `/skinforge/` 静态目录，用来给 SkinForge 的
+Tauri updater 提供 `latest.json` 和安装包下载。
+
+宿主机目录：
+```bash
+./skinforge-updates
+```
+
+容器内目录：
+```bash
+/opt/skinforge-updates
+```
+
+访问地址：
+```text
+http://62.234.58.74/skinforge/latest.json
+```
+
+推荐目录结构：
+```text
+/opt/skinforge-updates/
+  latest.json
+  releases/
+    1.2.0/
+      SkinForge_1.2.0_x64-setup.exe
+      SkinForge_1.2.0_x64-setup.exe.sig
+```
+
+`docker-compose.yml` 已经把宿主机 `./skinforge-updates` 挂载到容器内
+`/opt/skinforge-updates`。以后只维护 Docker 部署即可：更新发布时只需要替换
+这个目录里的文件，Nginx 会直接提供静态下载，不需要重启容器。
+
+---
+
+## 7. 日常维护
+
+### 7.1 更新代码并重新部署
 当你在本地修改了代码并推送到 Git 仓库后，在服务器上执行以下命令更新服务：
 
 ```bash
@@ -150,13 +186,13 @@ docker-compose up -d --build
 ```
 *(你的 MySQL 数据保存在 Docker 的数据卷中，重新构建和启动应用容器**不会**丢失数据。)*
 
-### 6.2 停止服务
+### 7.2 停止服务
 ```bash
 docker-compose down
 ```
 *(这会停止并删除容器，但保留数据卷。)*
 
-### 6.3 进入 MySQL 数据库
+### 7.3 进入 MySQL 数据库
 如果你需要手动执行 SQL 语句：
 ```bash
 docker-compose exec mysql mysql -u root -pcdk-mysql-root-2026 -D cdk_server
@@ -164,7 +200,7 @@ docker-compose exec mysql mysql -u root -pcdk-mysql-root-2026 -D cdk_server
 
 ---
 
-## 7. 常见问题排查
+## 8. 常见问题排查
 
 *   **构建时 `cargo build` 卡住或极慢**：
     通常是网络问题。`Dockerfile` 中已经配置了中科大的 Cargo 镜像源（`sparse+https://mirrors.ustc.edu.cn/crates.io-index/`）。如果依然缓慢，请检查服务器网络。
