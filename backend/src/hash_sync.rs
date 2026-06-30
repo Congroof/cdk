@@ -1,6 +1,6 @@
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use chrono::Utc;
@@ -15,6 +15,10 @@ const META_FILE_NAME: &str = "hashes.game.meta.json";
 const TEMP_FILE_NAME: &str = "hashes.game.txt.download";
 const BACKUP_FILE_NAME: &str = "hashes.game.txt.bak";
 const MIN_HASH_FILE_SIZE: u64 = 50 * 1024 * 1024;
+const HASH_DOWNLOAD_ATTEMPTS: usize = 3;
+const HASH_CONNECT_TIMEOUT_SECS: u64 = 15;
+const HASH_READ_TIMEOUT_SECS: u64 = 60;
+const HASH_REQUEST_TIMEOUT_SECS: u64 = 15 * 60;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,7 +63,9 @@ async fn sync_once(config: &HashSyncConfig) -> Result<(), String> {
     fs::create_dir_all(&config.mirror_dir).map_err(|e| format!("创建 Hash 镜像目录失败: {e}"))?;
 
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
+        .connect_timeout(Duration::from_secs(HASH_CONNECT_TIMEOUT_SECS))
+        .read_timeout(Duration::from_secs(HASH_READ_TIMEOUT_SECS))
+        .timeout(Duration::from_secs(HASH_REQUEST_TIMEOUT_SECS))
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
 
@@ -90,6 +96,7 @@ async fn sync_once(config: &HashSyncConfig) -> Result<(), String> {
 async fn fetch_remote_head(client: &reqwest::Client, url: &str) -> Result<RemoteHead, String> {
     let response = client
         .head(url)
+        .header(reqwest::header::ACCEPT_ENCODING, "identity")
         .send()
         .await
         .map_err(|e| format!("检查远端 Hash 文件失败: {e}"))?;
@@ -145,23 +152,72 @@ async fn download_hash_file(
 ) -> Result<HashMeta, String> {
     let temp_path = config.mirror_dir.join(TEMP_FILE_NAME);
     let hash_path = config.mirror_dir.join(HASH_FILE_NAME);
+
+    let downloaded = download_hash_file_with_retries(client, config, remote, &temp_path).await?;
+    replace_file(&temp_path, &hash_path)?;
+
+    Ok(downloaded)
+}
+
+async fn download_hash_file_with_retries(
+    client: &reqwest::Client,
+    config: &HashSyncConfig,
+    remote: &RemoteHead,
+    temp_path: &Path,
+) -> Result<HashMeta, String> {
+    let mut last_error = None;
+
+    for attempt in 1..=HASH_DOWNLOAD_ATTEMPTS {
+        let _ = fs::remove_file(temp_path);
+
+        match download_hash_file_attempt(client, config, remote, temp_path).await {
+            Ok(meta) => return Ok(meta),
+            Err(err) => {
+                let _ = fs::remove_file(temp_path);
+                tracing::error!(
+                    "SkinForge hash download attempt {}/{} failed: {}",
+                    attempt,
+                    HASH_DOWNLOAD_ATTEMPTS,
+                    err
+                );
+                last_error = Some(err);
+            }
+        }
+
+        if attempt < HASH_DOWNLOAD_ATTEMPTS {
+            tokio::time::sleep(Duration::from_secs(attempt as u64 * 5)).await;
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| "下载 Hash 文件失败".to_string()))
+}
+
+async fn download_hash_file_attempt(
+    client: &reqwest::Client,
+    config: &HashSyncConfig,
+    remote: &RemoteHead,
+    temp_path: &Path,
+) -> Result<HashMeta, String> {
     let response = client
         .get(&config.source_url)
+        .header(reqwest::header::ACCEPT_ENCODING, "identity")
         .send()
         .await
         .map_err(|e| format!("下载 Hash 文件失败: {e}"))?;
     if !response.status().is_success() {
         return Err(format!("下载 Hash 文件失败: HTTP {}", response.status()));
     }
+    let expected_size = remote.size.or_else(|| response.content_length());
 
     let mut file =
-        fs::File::create(&temp_path).map_err(|e| format!("创建临时 Hash 文件失败: {e}"))?;
+        fs::File::create(temp_path).map_err(|e| format!("创建临时 Hash 文件失败: {e}"))?;
     let mut stream = response.bytes_stream();
     let mut hasher = Sha256::new();
     let mut downloaded = 0u64;
 
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("下载 Hash 文件失败: {e}"))?;
+        let chunk =
+            chunk.map_err(|e| format!("下载 Hash 文件失败，已下载 {downloaded} 字节: {e}"))?;
         file.write_all(&chunk)
             .map_err(|e| format!("写入 Hash 文件失败: {e}"))?;
         hasher.update(&chunk);
@@ -171,8 +227,7 @@ async fn download_hash_file(
         .map_err(|e| format!("写入 Hash 文件失败: {e}"))?;
     drop(file);
 
-    validate_hash_file(&temp_path, downloaded, remote.size)?;
-    replace_file(&temp_path, &hash_path)?;
+    validate_hash_file(temp_path, downloaded, expected_size)?;
 
     Ok(HashMeta {
         version: remote.version.clone(),
