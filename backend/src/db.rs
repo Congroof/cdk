@@ -131,9 +131,12 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
             platform VARCHAR(64) NULL,
             metadata TEXT NULL,
             created_by BIGINT NULL,
+            is_done BOOLEAN NOT NULL DEFAULT FALSE,
+            done_at DATETIME NULL,
             created_at DATETIME DEFAULT NOW(),
             INDEX idx_feedback_created_by (created_by),
             INDEX idx_feedback_created_at (created_at),
+            INDEX idx_feedback_is_done (is_done),
             INDEX idx_feedback_machine_code (machine_code),
             INDEX idx_feedback_cdk_code (cdk_code),
             INDEX idx_feedback_type (feedback_type)
@@ -142,6 +145,24 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
     .execute(&pool)
     .await
     .expect("Failed to create user_feedback table");
+
+    let _ = sqlx::query(
+        "ALTER TABLE user_feedback ADD COLUMN is_done BOOLEAN NOT NULL DEFAULT FALSE AFTER created_by"
+    )
+    .execute(&pool)
+    .await;
+
+    let _ = sqlx::query(
+        "ALTER TABLE user_feedback ADD COLUMN done_at DATETIME NULL AFTER is_done"
+    )
+    .execute(&pool)
+    .await;
+
+    let _ = sqlx::query(
+        "ALTER TABLE user_feedback ADD INDEX idx_feedback_is_done (is_done)"
+    )
+    .execute(&pool)
+    .await;
 
     tracing::info!("Database '{}' ready", db_name);
     pool

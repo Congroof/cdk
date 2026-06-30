@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, RefreshCw, Search, Filter, Download, KeyRound, BarChart3, ShieldBan } from 'lucide-react';
+import { Plus, RefreshCw, Search, Filter, Download, KeyRound, BarChart3, ShieldBan, MessageSquare } from 'lucide-react';
 import Layout from '../components/Layout';
 import CDKTable from '../components/CDKTable';
 import CreateModal from '../components/CreateModal';
 import ExportModal from '../components/ExportModal';
 import UsageStats from '../components/UsageStats';
 import BannedMachines from '../components/BannedMachines';
+import FeedbackList from '../components/FeedbackList';
 import api from '../api';
 import type { Cdk } from '../types';
 
-type TabKey = 'cdk' | 'stats' | 'banned';
+type TabKey = 'cdk' | 'stats' | 'banned' | 'feedback';
 
 const statusFilters: { value: string; label: string }[] = [
   { value: '', label: '全部' },
@@ -128,6 +129,17 @@ export default function Dashboard() {
           <ShieldBan className="w-4 h-4" />
           封禁管理
         </button>
+        <button
+          onClick={() => setActiveTab('feedback')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+            activeTab === 'feedback'
+              ? 'bg-gradient-to-r from-sky-500/15 to-teal-500/15 text-sky-400 shadow-sm'
+              : 'text-slate-400 hover:text-slate-300 hover:bg-white/5'
+          }`}
+        >
+          <MessageSquare className="w-4 h-4" />
+          用户反馈
+        </button>
       </div>
 
       {activeTab === 'cdk' ? (
@@ -235,8 +247,10 @@ export default function Dashboard() {
         </>
       ) : activeTab === 'stats' ? (
         <UsageStats />
-      ) : (
+      ) : activeTab === 'banned' ? (
         <BannedMachines />
+      ) : (
+        <FeedbackList />
       )}
     </Layout>
   );

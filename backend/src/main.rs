@@ -46,6 +46,8 @@ async fn main() {
         .route("/banned/list", get(handlers::banned::list))
         .route("/banned/ban", post(handlers::banned::ban))
         .route("/banned/unban", post(handlers::banned::unban))
+        .route("/feedback/list", get(handlers::feedback::list))
+        .route("/feedback/set-done", post(handlers::feedback::set_done))
         .route_layer(axum_mw::from_fn_with_state(
             state.clone(),
             middleware::auth::auth_middleware,

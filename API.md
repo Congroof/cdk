@@ -67,6 +67,8 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 10 | POST | `/api/client/activate` | 否 | 激活 CDK（客户端） |
 | 11 | POST | `/api/client/feedback` | 否 | 提交用户反馈 |
 | 12 | POST | `/api/client/u/{username}/feedback` | 否 | 提交指定用户归属的用户反馈 |
+| 13 | GET | `/api/feedback/list` | 是 | 分页查询用户反馈 |
+| 14 | POST | `/api/feedback/set-done` | 是 | 标记反馈是否已完成 |
 
 > `/api/client/*` 和 `/api/cdk/validate|activate` 使用相同的处理逻辑，区别仅在于是否需要 JWT 认证。
 
@@ -573,6 +575,113 @@ curl -X POST http://localhost/api/client/u/admin/feedback \
 
 ---
 
+## 10. 查询用户反馈
+
+### `GET /api/feedback/list`
+
+分页查询用户反馈列表，用于后台反馈处理页。该接口需要 JWT 认证，会返回当前登录用户归属的反馈，以及未绑定用户的通用反馈。
+
+**请求头**：`Authorization: Bearer <token>`
+
+**Query 参数**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| page | number | 否 | 页码，默认 1，最小值 1 |
+| page_size | number | 否 | 每页条数，默认 10，最大 50 |
+| feedback_type | string | 否 | 反馈类型过滤，如 `general` / `bug` / `feature` / `payment` / `activation` |
+| is_done | boolean | 否 | 完成状态过滤：`true` 已完成，`false` 待处理 |
+| search | string | 否 | 搜索关键词（模糊匹配 content、contact、machine_code、cdk_code） |
+
+**调用示例**：
+
+```bash
+curl -X GET "http://localhost/api/feedback/list?page=1&page_size=10&is_done=false" \
+  -H "Authorization: Bearer eyJhbGci..."
+```
+
+**成功响应**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "feedback_type": "bug",
+        "content": "点击激活后没有响应",
+        "contact": "user@example.com",
+        "machine_code": "MACHINE-001",
+        "cdk_code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
+        "app_version": "1.2.3",
+        "platform": "windows",
+        "metadata": {
+          "os_version": "Windows 11"
+        },
+        "created_by": null,
+        "is_done": false,
+        "done_at": null,
+        "created_at": "2026-06-30T15:30:00"
+      }
+    ],
+    "total": 1,
+    "pending": 1,
+    "done": 0,
+    "page": 1,
+    "page_size": 10
+  }
+}
+```
+
+---
+
+## 11. 标记反馈完成状态
+
+### `POST /api/feedback/set-done`
+
+标记反馈是否已完成。该接口需要 JWT 认证。
+
+**请求头**：`Authorization: Bearer <token>`
+
+**请求参数**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | number | 是 | 反馈记录 ID |
+| is_done | boolean | 是 | 是否已完成 |
+
+**调用示例**：
+
+```bash
+curl -X POST http://localhost/api/feedback/set-done \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGci..." \
+  -d '{
+    "id": 1,
+    "is_done": true
+  }'
+```
+
+**成功响应**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "反馈已标记完成"
+  }
+}
+```
+
+**错误响应**：
+
+```json
+{ "success": false, "error": "反馈记录不存在" }
+```
+
+---
+
 ## CDK 数据模型
 
 | 字段 | 类型 | 说明 |
@@ -604,6 +713,8 @@ curl -X POST http://localhost/api/client/u/admin/feedback \
 | platform | string \| null | 平台信息 |
 | metadata | string \| null | 扩展信息 JSON 字符串 |
 | created_by | number \| null | 归属用户 ID；直接调用 `/api/client/feedback` 时为空 |
+| is_done | boolean | 是否已完成，默认 `false` |
+| done_at | string \| null | 标记完成时间；重新打开后为空 |
 | created_at | string | 创建时间 |
 
 ## CDK 状态流转

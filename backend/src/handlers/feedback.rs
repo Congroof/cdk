@@ -1,7 +1,9 @@
-use axum::extract::{Path, State};
-use axum::Json;
+use axum::extract::{Path, Query, State};
+use axum::{Extension, Json};
+use chrono::Utc;
 
 use crate::errors::AppError;
+use crate::middleware::auth::Claims;
 use crate::models::feedback::*;
 use crate::AppState;
 
@@ -34,6 +36,146 @@ pub async fn submit_for_user(
         .ok_or_else(|| AppError::NotFound("用户不存在".to_string()))?;
 
     insert_feedback(&state, Some(owner_id.0), payload).await
+}
+
+pub async fn list(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(params): Query<FeedbackListQuery>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+
+    let page = params.page.unwrap_or(1).max(1);
+    let page_size = params.page_size.unwrap_or(10).min(50);
+    let offset = (page - 1) * page_size;
+    let has_type = params
+        .feedback_type
+        .as_ref()
+        .is_some_and(|value| !value.trim().is_empty());
+    let has_search = params.search.as_ref().is_some_and(|value| !value.trim().is_empty());
+    let search_pattern = params
+        .search
+        .as_ref()
+        .map(|value| format!("%{}%", value.trim()))
+        .unwrap_or_default();
+
+    let mut conditions = vec!["(created_by = ? OR created_by IS NULL)".to_string()];
+    if has_type {
+        conditions.push("feedback_type = ?".to_string());
+    }
+    if params.is_done.is_some() {
+        conditions.push("is_done = ?".to_string());
+    }
+    if has_search {
+        conditions.push(
+            "(content LIKE ? OR contact LIKE ? OR machine_code LIKE ? OR cdk_code LIKE ?)"
+                .to_string(),
+        );
+    }
+
+    let where_clause = format!(" WHERE {}", conditions.join(" AND "));
+    let count_sql = format!("SELECT COUNT(*) FROM user_feedback{}", where_clause);
+    let data_sql = format!(
+        "SELECT * FROM user_feedback{} ORDER BY is_done ASC, created_at DESC LIMIT ? OFFSET ?",
+        where_clause
+    );
+
+    macro_rules! bind_filters {
+        ($query:expr) => {{
+            let mut query = $query.bind(user_id.0);
+            if has_type {
+                query = query.bind(params.feedback_type.as_ref().unwrap().trim());
+            }
+            if let Some(is_done) = params.is_done {
+                query = query.bind(is_done);
+            }
+            if has_search {
+                query = query
+                    .bind(&search_pattern)
+                    .bind(&search_pattern)
+                    .bind(&search_pattern)
+                    .bind(&search_pattern);
+            }
+            query
+        }};
+    }
+
+    let total: (i64,) = bind_filters!(sqlx::query_as(&count_sql))
+        .fetch_one(&state.db)
+        .await?;
+
+    let (pending,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM user_feedback WHERE (created_by = ? OR created_by IS NULL) AND is_done = FALSE"
+    )
+    .bind(user_id.0)
+    .fetch_one(&state.db)
+    .await?;
+
+    let (done,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM user_feedback WHERE (created_by = ? OR created_by IS NULL) AND is_done = TRUE"
+    )
+    .bind(user_id.0)
+    .fetch_one(&state.db)
+    .await?;
+
+    let rows: Vec<FeedbackRow> = bind_filters!(sqlx::query_as(&data_sql))
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await?;
+    let items: Vec<Feedback> = rows.into_iter().map(Feedback::from).collect();
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "items": items,
+            "total": total.0,
+            "pending": pending,
+            "done": done,
+            "page": page,
+            "page_size": page_size,
+        },
+    })))
+}
+
+pub async fn set_done(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(payload): Json<SetFeedbackDoneRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+
+    let done_at = if payload.is_done {
+        Some(Utc::now().naive_utc())
+    } else {
+        None
+    };
+    let result = sqlx::query(
+        "UPDATE user_feedback SET is_done = ?, done_at = ? WHERE id = ? AND (created_by = ? OR created_by IS NULL)"
+    )
+    .bind(payload.is_done)
+    .bind(done_at)
+    .bind(payload.id)
+    .bind(user_id.0)
+    .execute(&state.db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("反馈记录不存在".to_string()));
+    }
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "message": if payload.is_done { "反馈已标记完成" } else { "反馈已标记待处理" },
+        },
+    })))
 }
 
 async fn insert_feedback(

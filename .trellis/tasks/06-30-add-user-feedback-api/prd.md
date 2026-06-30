@@ -10,7 +10,9 @@ Clients need a lightweight way to submit user feedback to the CDK server. The se
 - Add unauthenticated client feedback submission routes:
   - `POST /api/client/feedback` stores feedback without an owner.
   - `POST /api/client/u/{username}/feedback` stores feedback under the specified owner.
-- Do not add administrator/management feedback APIs in this change.
+- Add authenticated management routes for viewing and closing feedback:
+  - `GET /api/feedback/list`
+  - `POST /api/feedback/set-done`
 - Document table schema, request fields, responses, examples, and integration notes in `API.md`.
 
 ## Non-Goals
@@ -33,6 +35,8 @@ Table: `user_feedback`
 - `platform VARCHAR(64) NULL`
 - `metadata TEXT NULL`
 - `created_by BIGINT NULL`
+- `is_done BOOLEAN NOT NULL DEFAULT FALSE`
+- `done_at DATETIME NULL`
 - `created_at DATETIME DEFAULT NOW()`
 
 Indexes:
@@ -62,11 +66,38 @@ Response:
 
 - Returns `id` and `message` when stored successfully.
 
+### List feedback
+
+Query fields:
+
+- `page`: optional, default 1, min 1.
+- `page_size`: optional, default 10, max 50.
+- `feedback_type`: optional exact filter.
+- `is_done`: optional boolean filter.
+- `search`: optional fuzzy search across content, contact, machine_code, cdk_code.
+
+Response:
+
+- Returns `items`, `total`, `pending`, `done`, `page`, and `page_size`.
+
+### Mark feedback done state
+
+Request fields:
+
+- `id`: required feedback ID.
+- `is_done`: required boolean.
+
+Response:
+
+- Returns `message`.
+
 ## Acceptance Criteria
 
 - Server starts with `user_feedback` table auto-created.
 - Manual migration SQL exists for the new table.
 - New routes are registered in `main.rs`.
 - Input validation returns Chinese `BadRequest` messages.
+- Frontend dashboard includes a feedback tab with list, filters, search, and done-state actions.
 - `cargo fmt --check` and `cargo build` pass for the backend.
+- `npm run build` passes for the frontend.
 - `API.md` contains integration documentation for the new endpoints and table.

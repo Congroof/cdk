@@ -81,3 +81,28 @@ export interface BannedMachine {
   created_by: number;
   created_at: string;
 }
+
+export interface UserFeedback {
+  id: number;
+  feedback_type: string;
+  content: string;
+  contact: string | null;
+  machine_code: string | null;
+  cdk_code: string | null;
+  app_version: string | null;
+  platform: string | null;
+  metadata: unknown | null;
+  created_by: number | null;
+  is_done: boolean;
+  done_at: string | null;
+  created_at: string;
+}
+
+export interface FeedbackListResponse {
+  items: UserFeedback[];
+  total: number;
+  pending: number;
+  done: number;
+  page: number;
+  page_size: number;
+}
