@@ -4,5 +4,8 @@ frontend/dist
 cli/
 .trellis/
 .cursor/
+.agents/
+.codex/
 .git/
+.DS_Store
 *.md
