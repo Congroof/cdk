@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::time::Duration;
 
@@ -7,6 +7,7 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tokio::io::AsyncWriteExt;
 
 use crate::config::HashSyncConfig;
 
@@ -18,7 +19,7 @@ const MIN_HASH_FILE_SIZE: u64 = 50 * 1024 * 1024;
 const HASH_DOWNLOAD_ATTEMPTS: usize = 3;
 const HASH_CONNECT_TIMEOUT_SECS: u64 = 15;
 const HASH_READ_TIMEOUT_SECS: u64 = 60;
-const HASH_REQUEST_TIMEOUT_SECS: u64 = 15 * 60;
+const HASH_REQUEST_TIMEOUT_SECS: u64 = 60 * 60;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -209,8 +210,9 @@ async fn download_hash_file_attempt(
     }
     let expected_size = remote.size.or_else(|| response.content_length());
 
-    let mut file =
-        fs::File::create(temp_path).map_err(|e| format!("创建临时 Hash 文件失败: {e}"))?;
+    let mut file = tokio::fs::File::create(temp_path)
+        .await
+        .map_err(|e| format!("创建临时 Hash 文件失败: {e}"))?;
     let mut stream = response.bytes_stream();
     let mut hasher = Sha256::new();
     let mut downloaded = 0u64;
@@ -219,11 +221,13 @@ async fn download_hash_file_attempt(
         let chunk =
             chunk.map_err(|e| format!("下载 Hash 文件失败，已下载 {downloaded} 字节: {e}"))?;
         file.write_all(&chunk)
+            .await
             .map_err(|e| format!("写入 Hash 文件失败: {e}"))?;
         hasher.update(&chunk);
         downloaded += chunk.len() as u64;
     }
     file.flush()
+        .await
         .map_err(|e| format!("写入 Hash 文件失败: {e}"))?;
     drop(file);
 
