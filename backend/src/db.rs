@@ -38,7 +38,7 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
             username VARCHAR(64) NOT NULL UNIQUE,
             password_hash VARCHAR(256) NOT NULL,
             created_at DATETIME DEFAULT NOW()
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     )
     .execute(&pool)
     .await
@@ -61,24 +61,20 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
             INDEX idx_status (status),
             INDEX idx_machine_code (machine_code),
             INDEX idx_created_by (created_by)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     )
     .execute(&pool)
     .await
     .expect("Failed to create cdkeys table");
 
     // Auto-add created_by column for existing deployments
-    let _ = sqlx::query(
-        "ALTER TABLE cdkeys ADD COLUMN created_by BIGINT NULL AFTER remark"
-    )
-    .execute(&pool)
-    .await;
+    let _ = sqlx::query("ALTER TABLE cdkeys ADD COLUMN created_by BIGINT NULL AFTER remark")
+        .execute(&pool)
+        .await;
 
-    let _ = sqlx::query(
-        "ALTER TABLE cdkeys ADD INDEX idx_created_by (created_by)"
-    )
-    .execute(&pool)
-    .await;
+    let _ = sqlx::query("ALTER TABLE cdkeys ADD INDEX idx_created_by (created_by)")
+        .execute(&pool)
+        .await;
 
     // Assign existing CDKs to admin user
     let _ = sqlx::query(
@@ -98,7 +94,7 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
             INDEX idx_ul_machine (machine_code),
             INDEX idx_ul_created_at (created_at),
             INDEX idx_ul_created_by (created_by)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     )
     .execute(&pool)
     .await
@@ -113,7 +109,7 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
             created_at DATETIME DEFAULT NOW(),
             UNIQUE INDEX idx_bm_unique (machine_code, created_by),
             INDEX idx_bm_created_by (created_by)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     )
     .execute(&pool)
     .await
@@ -152,17 +148,13 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
     .execute(&pool)
     .await;
 
-    let _ = sqlx::query(
-        "ALTER TABLE user_feedback ADD COLUMN done_at DATETIME NULL AFTER is_done"
-    )
-    .execute(&pool)
-    .await;
+    let _ = sqlx::query("ALTER TABLE user_feedback ADD COLUMN done_at DATETIME NULL AFTER is_done")
+        .execute(&pool)
+        .await;
 
-    let _ = sqlx::query(
-        "ALTER TABLE user_feedback ADD INDEX idx_feedback_is_done (is_done)"
-    )
-    .execute(&pool)
-    .await;
+    let _ = sqlx::query("ALTER TABLE user_feedback ADD INDEX idx_feedback_is_done (is_done)")
+        .execute(&pool)
+        .await;
 
     tracing::info!("Database '{}' ready", db_name);
     pool

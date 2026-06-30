@@ -7,6 +7,12 @@ cli/target/
 frontend/node_modules/
 frontend/dist/
 
+# SkinForge hash mirror runtime files
+skinforge-updates/hashes/*.txt
+skinforge-updates/hashes/*.download
+skinforge-updates/hashes/*.bak
+skinforge-updates/hashes/*.json
+
 # IDE
 .vscode/
 .idea/

@@ -13,12 +13,10 @@ pub async fn usage_stats(
     Extension(claims): Extension<Claims>,
     Query(params): Query<UsageStatsQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let user_id: (i64,) = sqlx::query_as(
-        "SELECT id FROM users WHERE username = ?"
-    )
-    .bind(&claims.sub)
-    .fetch_one(&state.db)
-    .await?;
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
 
     let days = params.days.unwrap_or(30).max(1).min(365);
     let now = Utc::now().naive_utc();
@@ -41,26 +39,34 @@ pub async fn usage_stats(
     .fetch_one(&state.db)
     .await?;
 
-    let (total_requests,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM usage_logs WHERE created_by = ? AND created_at >= ?"
-    )
-    .bind(user_id.0)
-    .bind(since)
-    .fetch_one(&state.db)
-    .await?;
+    let (total_requests,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM usage_logs WHERE created_by = ? AND created_at >= ?")
+            .bind(user_id.0)
+            .bind(since)
+            .fetch_one(&state.db)
+            .await?;
 
     let has_search = params.search.as_ref().is_some_and(|s| !s.is_empty());
-    let search_pattern = params.search.as_ref()
+    let search_pattern = params
+        .search
+        .as_ref()
         .map(|s| format!("%{}%", s))
         .unwrap_or_default();
 
-    let machine_rows: Vec<(String, i64, chrono::NaiveDateTime, chrono::NaiveDateTime, i64, i64)> = if has_search {
+    let machine_rows: Vec<(
+        String,
+        i64,
+        chrono::NaiveDateTime,
+        chrono::NaiveDateTime,
+        i64,
+        i64,
+    )> = if has_search {
         sqlx::query_as(
             "SELECT machine_code, COUNT(DISTINCT cdk_code), \
              MIN(created_at), MAX(created_at), \
              COUNT(DISTINCT DATE(created_at)), COUNT(*) \
              FROM usage_logs WHERE created_by = ? AND created_at >= ? AND machine_code LIKE ? \
-             GROUP BY machine_code ORDER BY MAX(created_at) DESC LIMIT 200"
+             GROUP BY machine_code ORDER BY MAX(created_at) DESC LIMIT 200",
         )
         .bind(user_id.0)
         .bind(since)
@@ -73,7 +79,7 @@ pub async fn usage_stats(
              MIN(created_at), MAX(created_at), \
              COUNT(DISTINCT DATE(created_at)), COUNT(*) \
              FROM usage_logs WHERE created_by = ? AND created_at >= ? \
-             GROUP BY machine_code ORDER BY MAX(created_at) DESC LIMIT 200"
+             GROUP BY machine_code ORDER BY MAX(created_at) DESC LIMIT 200",
         )
         .bind(user_id.0)
         .bind(since)
@@ -81,14 +87,17 @@ pub async fn usage_stats(
         .await?
     };
 
-    let machines: Vec<MachineStats> = machine_rows.into_iter().map(|r| MachineStats {
-        machine_code: r.0,
-        cdk_count: r.1,
-        first_seen: r.2,
-        last_seen: r.3,
-        active_days: r.4,
-        total_requests: r.5,
-    }).collect();
+    let machines: Vec<MachineStats> = machine_rows
+        .into_iter()
+        .map(|r| MachineStats {
+            machine_code: r.0,
+            cdk_count: r.1,
+            first_seen: r.2,
+            last_seen: r.3,
+            active_days: r.4,
+            total_requests: r.5,
+        })
+        .collect();
 
     let trend_rows: Vec<(String, i64, i64)> = sqlx::query_as(
         "SELECT DATE_FORMAT(created_at, '%Y-%m-%d'), COUNT(*), \
@@ -101,11 +110,14 @@ pub async fn usage_stats(
     .fetch_all(&state.db)
     .await?;
 
-    let daily_trend: Vec<DailyTrend> = trend_rows.into_iter().map(|r| DailyTrend {
-        date: r.0,
-        requests: r.1,
-        unique_machines: r.2,
-    }).collect();
+    let daily_trend: Vec<DailyTrend> = trend_rows
+        .into_iter()
+        .map(|r| DailyTrend {
+            date: r.0,
+            requests: r.1,
+            unique_machines: r.2,
+        })
+        .collect();
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -126,44 +138,46 @@ pub async fn machine_usage(
     Extension(claims): Extension<Claims>,
     Query(params): Query<MachineUsageQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let user_id: (i64,) = sqlx::query_as(
-        "SELECT id FROM users WHERE username = ?"
-    )
-    .bind(&claims.sub)
-    .fetch_one(&state.db)
-    .await?;
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
 
     let days = params.days.unwrap_or(30).max(1).min(365);
     let since = Utc::now().naive_utc() - chrono::Duration::days(days as i64);
 
-    let daily_rows: Vec<(String, i64, chrono::NaiveDateTime, chrono::NaiveDateTime)> = sqlx::query_as(
-        "SELECT DATE_FORMAT(created_at, '%Y-%m-%d'), COUNT(*), \
+    let daily_rows: Vec<(String, i64, chrono::NaiveDateTime, chrono::NaiveDateTime)> =
+        sqlx::query_as(
+            "SELECT DATE_FORMAT(created_at, '%Y-%m-%d'), COUNT(*), \
          MIN(created_at), MAX(created_at) \
          FROM usage_logs WHERE created_by = ? AND machine_code = ? AND created_at >= ? \
          GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d') \
-         ORDER BY DATE_FORMAT(created_at, '%Y-%m-%d') DESC"
-    )
-    .bind(user_id.0)
-    .bind(&params.machine_code)
-    .bind(since)
-    .fetch_all(&state.db)
-    .await?;
+         ORDER BY DATE_FORMAT(created_at, '%Y-%m-%d') DESC",
+        )
+        .bind(user_id.0)
+        .bind(&params.machine_code)
+        .bind(since)
+        .fetch_all(&state.db)
+        .await?;
 
-    let daily_usage: Vec<serde_json::Value> = daily_rows.into_iter().map(|r| {
-        let duration_minutes = (r.3 - r.2).num_minutes();
-        serde_json::json!({
-            "date": r.0,
-            "requests": r.1,
-            "first_active": r.2,
-            "last_active": r.3,
-            "duration_minutes": duration_minutes,
+    let daily_usage: Vec<serde_json::Value> = daily_rows
+        .into_iter()
+        .map(|r| {
+            let duration_minutes = (r.3 - r.2).num_minutes();
+            serde_json::json!({
+                "date": r.0,
+                "requests": r.1,
+                "first_active": r.2,
+                "last_active": r.3,
+                "duration_minutes": duration_minutes,
+            })
         })
-    }).collect();
+        .collect();
 
     let cdk_rows: Vec<(String, i64, chrono::NaiveDateTime)> = sqlx::query_as(
         "SELECT cdk_code, COUNT(*), MAX(created_at) \
          FROM usage_logs WHERE created_by = ? AND machine_code = ? AND created_at >= ? \
-         GROUP BY cdk_code ORDER BY MAX(created_at) DESC"
+         GROUP BY cdk_code ORDER BY MAX(created_at) DESC",
     )
     .bind(user_id.0)
     .bind(&params.machine_code)
@@ -171,13 +185,16 @@ pub async fn machine_usage(
     .fetch_all(&state.db)
     .await?;
 
-    let cdks: Vec<serde_json::Value> = cdk_rows.into_iter().map(|r| {
-        serde_json::json!({
-            "code": r.0,
-            "requests": r.1,
-            "last_used": r.2,
+    let cdks: Vec<serde_json::Value> = cdk_rows
+        .into_iter()
+        .map(|r| {
+            serde_json::json!({
+                "code": r.0,
+                "requests": r.1,
+                "last_used": r.2,
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -191,9 +208,13 @@ pub async fn machine_usage(
 
 fn generate_license_key() -> String {
     let mut rng = rand::thread_rng();
-    let chars: Vec<char> = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789abcdefghjkmnpqrstuvwxyz".chars().collect();
+    let chars: Vec<char> = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789abcdefghjkmnpqrstuvwxyz"
+        .chars()
+        .collect();
     let segment = |rng: &mut rand::rngs::ThreadRng, len: usize| -> String {
-        (0..len).map(|_| chars[rng.gen_range(0..chars.len())]).collect()
+        (0..len)
+            .map(|_| chars[rng.gen_range(0..chars.len())])
+            .collect()
     };
     format!(
         "{}-{}-{}-{}-{}",
@@ -222,12 +243,10 @@ pub async fn generate(
         return Err(AppError::BadRequest("单位须为 days 或 hours".to_string()));
     }
 
-    let user_id: (i64,) = sqlx::query_as(
-        "SELECT id FROM users WHERE username = ?"
-    )
-    .bind(&claims.sub)
-    .fetch_one(&state.db)
-    .await?;
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
 
     let mut codes = Vec::new();
     for _ in 0..payload.count {
@@ -258,13 +277,11 @@ pub async fn list(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let now = Utc::now().naive_utc();
 
-    let user_id: (i64,) = sqlx::query_as(
-        "SELECT id FROM users WHERE username = ?"
-    )
-    .bind(&claims.sub)
-    .fetch_one(&state.db)
-    .await?;
-    
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+
     // 动态更新已过期的 CDK 状态
     sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE status = 'activated' AND expires_at IS NOT NULL AND expires_at < ? AND created_by = ?")
         .bind(now)
@@ -277,7 +294,9 @@ pub async fn list(
     let offset = (page - 1) * page_size;
 
     let valid_statuses = ["unused", "activated", "expired", "disabled"];
-    let has_status = params.status.as_ref()
+    let has_status = params
+        .status
+        .as_ref()
         .is_some_and(|s| !s.is_empty() && valid_statuses.contains(&s.as_str()));
     let has_search = params.search.as_ref().is_some_and(|s| !s.is_empty());
 
@@ -297,7 +316,9 @@ pub async fn list(
         where_clause
     );
 
-    let search_pattern = params.search.as_ref()
+    let search_pattern = params
+        .search
+        .as_ref()
         .map(|s| format!("%{}%", s))
         .unwrap_or_default();
 
@@ -308,7 +329,10 @@ pub async fn list(
                 q = q.bind(params.status.as_ref().unwrap());
             }
             if has_search {
-                q = q.bind(&search_pattern).bind(&search_pattern).bind(&search_pattern);
+                q = q
+                    .bind(&search_pattern)
+                    .bind(&search_pattern)
+                    .bind(&search_pattern);
             }
             q
         }};
@@ -341,22 +365,22 @@ pub async fn validate(
     State(state): State<AppState>,
     Json(payload): Json<ValidateRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let admin_id: (i64,) = sqlx::query_as(
-        "SELECT id FROM users WHERE username = 'admin'"
-    )
-    .fetch_one(&state.db)
-    .await?;
+    let admin_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = 'admin'")
+        .fetch_one(&state.db)
+        .await?;
 
     if let Some(ref mc) = payload.machine_code {
         let banned: Option<(i64,)> = sqlx::query_as(
-            "SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?"
+            "SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?",
         )
         .bind(mc)
         .bind(admin_id.0)
         .fetch_optional(&state.db)
         .await?;
         if banned.is_some() {
-            return Err(AppError::BadRequest("该机器码已被封禁，无法验证".to_string()));
+            return Err(AppError::BadRequest(
+                "该机器码已被封禁，无法验证".to_string(),
+            ));
         }
 
         let _ = sqlx::query(
@@ -370,7 +394,7 @@ pub async fn validate(
     }
 
     let row = sqlx::query_as::<_, CdkRow>(
-        "SELECT * FROM cdkeys WHERE code = ? AND (created_by = ? OR created_by IS NULL)"
+        "SELECT * FROM cdkeys WHERE code = ? AND (created_by = ? OR created_by IS NULL)",
     )
     .bind(&payload.code)
     .bind(admin_id.0)
@@ -407,7 +431,9 @@ pub async fn validate(
                         message: "CDK 已过期".to_string(),
                     }
                 } else {
-                    let machine_match = payload.machine_code.as_ref()
+                    let machine_match = payload
+                        .machine_code
+                        .as_ref()
                         .map(|mc| cdk.machine_code.as_ref() == Some(mc))
                         .unwrap_or(true);
                     ValidateResponse {
@@ -452,21 +478,20 @@ pub async fn activate(
         return Err(AppError::BadRequest("激活码和机器码不能为空".to_string()));
     }
 
-    let admin_id: (i64,) = sqlx::query_as(
-        "SELECT id FROM users WHERE username = 'admin'"
-    )
-    .fetch_one(&state.db)
-    .await?;
+    let admin_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = 'admin'")
+        .fetch_one(&state.db)
+        .await?;
 
-    let banned: Option<(i64,)> = sqlx::query_as(
-        "SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?"
-    )
-    .bind(&payload.machine_code)
-    .bind(admin_id.0)
-    .fetch_optional(&state.db)
-    .await?;
+    let banned: Option<(i64,)> =
+        sqlx::query_as("SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?")
+            .bind(&payload.machine_code)
+            .bind(admin_id.0)
+            .fetch_optional(&state.db)
+            .await?;
     if banned.is_some() {
-        return Err(AppError::BadRequest("该机器码已被封禁，无法激活".to_string()));
+        return Err(AppError::BadRequest(
+            "该机器码已被封禁，无法激活".to_string(),
+        ));
     }
 
     let _ = sqlx::query(
@@ -479,7 +504,7 @@ pub async fn activate(
     .await;
 
     let row = sqlx::query_as::<_, CdkRow>(
-        "SELECT * FROM cdkeys WHERE code = ? AND (created_by = ? OR created_by IS NULL)"
+        "SELECT * FROM cdkeys WHERE code = ? AND (created_by = ? OR created_by IS NULL)",
     )
     .bind(&payload.code)
     .bind(admin_id.0)
@@ -516,15 +541,13 @@ pub async fn activate(
                     },
                 })));
             }
-            
+
             // 允许换绑：更新机器码
-            let result = sqlx::query(
-                "UPDATE cdkeys SET machine_code = ? WHERE id = ?"
-            )
-            .bind(&payload.machine_code)
-            .bind(cdk.id)
-            .execute(&state.db)
-            .await?;
+            let result = sqlx::query("UPDATE cdkeys SET machine_code = ? WHERE id = ?")
+                .bind(&payload.machine_code)
+                .bind(cdk.id)
+                .execute(&state.db)
+                .await?;
 
             if result.rows_affected() == 0 {
                 return Err(AppError::Conflict("CDK 状态已变更，请重试".to_string()));
@@ -572,12 +595,10 @@ pub async fn disable(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<DisableRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let user_id: (i64,) = sqlx::query_as(
-        "SELECT id FROM users WHERE username = ?"
-    )
-    .bind(&claims.sub)
-    .fetch_one(&state.db)
-    .await?;
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
 
     let result = sqlx::query(
         "UPDATE cdkeys SET status = 'disabled' WHERE code = ? AND status != 'disabled' AND created_by = ?"
@@ -603,13 +624,11 @@ pub async fn stats(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let now = Utc::now().naive_utc();
 
-    let user_id: (i64,) = sqlx::query_as(
-        "SELECT id FROM users WHERE username = ?"
-    )
-    .bind(&claims.sub)
-    .fetch_one(&state.db)
-    .await?;
-    
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+
     // 动态更新已过期的 CDK 状态
     sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE status = 'activated' AND expires_at IS NOT NULL AND expires_at < ? AND created_by = ?")
         .bind(now)
@@ -617,12 +636,11 @@ pub async fn stats(
         .execute(&state.db)
         .await?;
 
-    let rows: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT status, COUNT(*) FROM cdkeys WHERE created_by = ? GROUP BY status"
-    )
-    .bind(user_id.0)
-    .fetch_all(&state.db)
-    .await?;
+    let rows: Vec<(String, i64)> =
+        sqlx::query_as("SELECT status, COUNT(*) FROM cdkeys WHERE created_by = ? GROUP BY status")
+            .bind(user_id.0)
+            .fetch_all(&state.db)
+            .await?;
 
     let mut total: i64 = 0;
     let mut unused: i64 = 0;
@@ -654,13 +672,11 @@ pub async fn export(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let now = Utc::now().naive_utc();
 
-    let user_id: (i64,) = sqlx::query_as(
-        "SELECT id FROM users WHERE username = ?"
-    )
-    .bind(&claims.sub)
-    .fetch_one(&state.db)
-    .await?;
-    
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+
     // 动态更新已过期的 CDK 状态
     sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE status = 'activated' AND expires_at IS NOT NULL AND expires_at < ? AND created_by = ?")
         .bind(now)
@@ -669,24 +685,41 @@ pub async fn export(
         .await?;
 
     let valid_statuses = ["unused", "activated", "expired", "disabled"];
-    let has_status = params.status.as_ref()
+    let has_status = params
+        .status
+        .as_ref()
         .is_some_and(|s| !s.is_empty() && valid_statuses.contains(&s.as_str()));
     let has_from = params.date_from.as_ref().is_some_and(|s| !s.is_empty());
     let has_to = params.date_to.as_ref().is_some_and(|s| !s.is_empty());
 
     let mut conditions = vec!["created_by = ?".to_string()];
-    if has_status { conditions.push("status = ?".to_string()); }
-    if has_from { conditions.push("created_at >= ?".to_string()); }
-    if has_to { conditions.push("created_at < DATE_ADD(?, INTERVAL 1 DAY)".to_string()); }
+    if has_status {
+        conditions.push("status = ?".to_string());
+    }
+    if has_from {
+        conditions.push("created_at >= ?".to_string());
+    }
+    if has_to {
+        conditions.push("created_at < DATE_ADD(?, INTERVAL 1 DAY)".to_string());
+    }
 
     let where_clause = format!(" WHERE {}", conditions.join(" AND "));
 
-    let sql = format!("SELECT * FROM cdkeys{} ORDER BY created_at DESC LIMIT 10000", where_clause);
+    let sql = format!(
+        "SELECT * FROM cdkeys{} ORDER BY created_at DESC LIMIT 10000",
+        where_clause
+    );
     let mut query = sqlx::query_as::<_, CdkRow>(&sql).bind(user_id.0);
 
-    if has_status { query = query.bind(params.status.as_ref().unwrap()); }
-    if has_from { query = query.bind(params.date_from.as_ref().unwrap()); }
-    if has_to { query = query.bind(params.date_to.as_ref().unwrap()); }
+    if has_status {
+        query = query.bind(params.status.as_ref().unwrap());
+    }
+    if has_from {
+        query = query.bind(params.date_from.as_ref().unwrap());
+    }
+    if has_to {
+        query = query.bind(params.date_to.as_ref().unwrap());
+    }
 
     let rows = query.fetch_all(&state.db).await?;
     let items: Vec<Cdk> = rows.into_iter().map(Cdk::from).collect();
@@ -702,24 +735,24 @@ pub async fn user_validate(
     axum::extract::Path(username): axum::extract::Path<String>,
     Json(payload): Json<ValidateRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let owner_id: (i64,) = sqlx::query_as(
-        "SELECT id FROM users WHERE username = ?"
-    )
-    .bind(&username)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
+    let owner_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&username)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
 
     if let Some(ref mc) = payload.machine_code {
         let banned: Option<(i64,)> = sqlx::query_as(
-            "SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?"
+            "SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?",
         )
         .bind(mc)
         .bind(owner_id.0)
         .fetch_optional(&state.db)
         .await?;
         if banned.is_some() {
-            return Err(AppError::BadRequest("该机器码已被封禁，无法验证".to_string()));
+            return Err(AppError::BadRequest(
+                "该机器码已被封禁，无法验证".to_string(),
+            ));
         }
 
         let _ = sqlx::query(
@@ -732,14 +765,12 @@ pub async fn user_validate(
         .await;
     }
 
-    let row = sqlx::query_as::<_, CdkRow>(
-        "SELECT * FROM cdkeys WHERE code = ? AND created_by = ?"
-    )
-    .bind(&payload.code)
-    .bind(owner_id.0)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
+    let row = sqlx::query_as::<_, CdkRow>("SELECT * FROM cdkeys WHERE code = ? AND created_by = ?")
+        .bind(&payload.code)
+        .bind(owner_id.0)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
 
     let cdk = Cdk::from(row);
 
@@ -770,7 +801,9 @@ pub async fn user_validate(
                         message: "CDK 已过期".to_string(),
                     }
                 } else {
-                    let machine_match = payload.machine_code.as_ref()
+                    let machine_match = payload
+                        .machine_code
+                        .as_ref()
                         .map(|mc| cdk.machine_code.as_ref() == Some(mc))
                         .unwrap_or(true);
                     ValidateResponse {
@@ -816,23 +849,22 @@ pub async fn user_activate(
         return Err(AppError::BadRequest("激活码和机器码不能为空".to_string()));
     }
 
-    let owner_id: (i64,) = sqlx::query_as(
-        "SELECT id FROM users WHERE username = ?"
-    )
-    .bind(&username)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
+    let owner_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&username)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
 
-    let banned: Option<(i64,)> = sqlx::query_as(
-        "SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?"
-    )
-    .bind(&payload.machine_code)
-    .bind(owner_id.0)
-    .fetch_optional(&state.db)
-    .await?;
+    let banned: Option<(i64,)> =
+        sqlx::query_as("SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?")
+            .bind(&payload.machine_code)
+            .bind(owner_id.0)
+            .fetch_optional(&state.db)
+            .await?;
     if banned.is_some() {
-        return Err(AppError::BadRequest("该机器码已被封禁，无法激活".to_string()));
+        return Err(AppError::BadRequest(
+            "该机器码已被封禁，无法激活".to_string(),
+        ));
     }
 
     let _ = sqlx::query(
@@ -844,14 +876,12 @@ pub async fn user_activate(
     .execute(&state.db)
     .await;
 
-    let row = sqlx::query_as::<_, CdkRow>(
-        "SELECT * FROM cdkeys WHERE code = ? AND created_by = ?"
-    )
-    .bind(&payload.code)
-    .bind(owner_id.0)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
+    let row = sqlx::query_as::<_, CdkRow>("SELECT * FROM cdkeys WHERE code = ? AND created_by = ?")
+        .bind(&payload.code)
+        .bind(owner_id.0)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
 
     let hours = row.duration_as_hours();
     let cdk = Cdk::from(row);
@@ -882,14 +912,12 @@ pub async fn user_activate(
                     },
                 })));
             }
-            
-            let result = sqlx::query(
-                "UPDATE cdkeys SET machine_code = ? WHERE id = ?"
-            )
-            .bind(&payload.machine_code)
-            .bind(cdk.id)
-            .execute(&state.db)
-            .await?;
+
+            let result = sqlx::query("UPDATE cdkeys SET machine_code = ? WHERE id = ?")
+                .bind(&payload.machine_code)
+                .bind(cdk.id)
+                .execute(&state.db)
+                .await?;
 
             if result.rows_affected() == 0 {
                 return Err(AppError::Conflict("CDK 状态已变更，请重试".to_string()));

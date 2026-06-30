@@ -55,7 +55,10 @@ pub async fn list(
         .feedback_type
         .as_ref()
         .is_some_and(|value| !value.trim().is_empty());
-    let has_search = params.search.as_ref().is_some_and(|value| !value.trim().is_empty());
+    let has_search = params
+        .search
+        .as_ref()
+        .is_some_and(|value| !value.trim().is_empty());
     let search_pattern = params
         .search
         .as_ref()

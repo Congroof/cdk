@@ -29,6 +29,10 @@ services:
       - DATABASE_URL=mysql://cdk:cdk-db-password-2026@mysql:3306/cdk_server
       - JWT_SECRET=cdk-server-jwt-secret-key-2026
       - SERVER_ADDR=0.0.0.0:3000
+      - SKINFORGE_HASH_SYNC_ENABLED=true
+      - SKINFORGE_HASH_MIRROR_DIR=/opt/skinforge-updates/hashes
+      - SKINFORGE_HASH_PUBLIC_BASE_URL=http://62.234.58.74/skinforge/hashes
+      - SKINFORGE_HASH_SYNC_INTERVAL_HOURS=24
     depends_on:
       mysql:
         condition: service_healthy

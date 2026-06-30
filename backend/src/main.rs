@@ -2,6 +2,7 @@ mod config;
 mod db;
 mod errors;
 mod handlers;
+mod hash_sync;
 mod middleware;
 mod models;
 
@@ -27,6 +28,7 @@ async fn main() {
         db: pool,
         jwt_secret: cfg.jwt_secret.clone(),
     };
+    hash_sync::spawn_hash_sync(cfg.hash_sync.clone());
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -59,8 +61,14 @@ async fn main() {
         .route("/client/feedback", post(handlers::feedback::submit));
 
     let user_client_routes = Router::new()
-        .route("/client/u/{username}/validate", post(handlers::cdk::user_validate))
-        .route("/client/u/{username}/activate", post(handlers::cdk::user_activate))
+        .route(
+            "/client/u/{username}/validate",
+            post(handlers::cdk::user_validate),
+        )
+        .route(
+            "/client/u/{username}/activate",
+            post(handlers::cdk::user_activate),
+        )
         .route(
             "/client/u/{username}/feedback",
             post(handlers::feedback::submit_for_user),

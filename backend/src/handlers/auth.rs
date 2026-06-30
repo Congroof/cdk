@@ -12,7 +12,7 @@ pub async fn login(
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let user = sqlx::query_as::<_, (i64, String, String)>(
-        "SELECT id, username, password_hash FROM users WHERE username = ?"
+        "SELECT id, username, password_hash FROM users WHERE username = ?",
     )
     .bind(&payload.username)
     .fetch_optional(&state.db)
