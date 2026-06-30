@@ -65,6 +65,8 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 8 | POST | `/api/cdk/disable` | 是 | 禁用 CDK |
 | 9 | POST | `/api/client/validate` | 否 | 验证 CDK（客户端） |
 | 10 | POST | `/api/client/activate` | 否 | 激活 CDK（客户端） |
+| 11 | POST | `/api/client/feedback` | 否 | 提交用户反馈 |
+| 12 | POST | `/api/client/u/{username}/feedback` | 否 | 提交指定用户归属的用户反馈 |
 
 > `/api/client/*` 和 `/api/cdk/validate|activate` 使用相同的处理逻辑，区别仅在于是否需要 JWT 认证。
 
@@ -498,6 +500,79 @@ curl -X POST http://localhost/api/cdk/disable \
 
 ---
 
+## 9. 提交用户反馈
+
+### `POST /api/client/feedback`
+### `POST /api/client/u/{username}/feedback`
+
+采集客户端用户反馈。接口无需 JWT 认证，适合在客户端内直接调用。
+
+`/api/client/feedback` 会保存一条不绑定后台用户的反馈记录；`/api/client/u/{username}/feedback` 会把反馈记录绑定到指定用户名对应的用户，便于后续按业务归属处理。
+
+**请求参数**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| feedback_type | string | 否 | 反馈类型，默认 `general`，最长 32 字符。建议值：`general` / `bug` / `feature` / `payment` / `activation` |
+| content | string | 是 | 反馈内容，不能为空，最长 5000 字符 |
+| contact | string | 否 | 联系方式，最长 128 字符 |
+| machine_code | string | 否 | 机器码，最长 256 字符 |
+| cdk_code | string | 否 | CDK 激活码，最长 64 字符 |
+| app_version | string | 否 | 客户端版本，最长 64 字符 |
+| platform | string | 否 | 平台信息，最长 64 字符，如 `windows` / `macos` / `linux` |
+| metadata | object | 否 | 扩展信息，会以 JSON 字符串保存，序列化后最长 10000 字符 |
+
+**调用示例**：
+
+```bash
+curl -X POST http://localhost/api/client/feedback \
+  -H "Content-Type: application/json" \
+  -d '{
+    "feedback_type": "bug",
+    "content": "点击激活后没有响应",
+    "contact": "user@example.com",
+    "machine_code": "MACHINE-001",
+    "cdk_code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
+    "app_version": "1.2.3",
+    "platform": "windows",
+    "metadata": {
+      "os_version": "Windows 11",
+      "locale": "zh-CN"
+    }
+  }'
+```
+
+```bash
+curl -X POST http://localhost/api/client/u/admin/feedback \
+  -H "Content-Type: application/json" \
+  -d '{
+    "feedback_type": "feature",
+    "content": "希望增加离线激活说明"
+  }'
+```
+
+**成功响应**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "message": "反馈已提交"
+  }
+}
+```
+
+**错误响应**：
+
+```json
+{ "success": false, "error": "反馈内容不能为空" }
+{ "success": false, "error": "反馈内容过长" }
+{ "success": false, "error": "用户不存在" }
+```
+
+---
+
 ## CDK 数据模型
 
 | 字段 | 类型 | 说明 |
@@ -512,6 +587,24 @@ curl -X POST http://localhost/api/cdk/disable \
 | created_at | string | 创建时间 |
 | activated_at | string \| null | 激活时间 |
 | expires_at | string \| null | 过期时间 |
+
+## 用户反馈数据模型
+
+表名：`user_feedback`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | number | 自增主键 |
+| feedback_type | string | 反馈类型，默认 `general` |
+| content | string | 反馈内容 |
+| contact | string \| null | 联系方式 |
+| machine_code | string \| null | 机器码 |
+| cdk_code | string \| null | CDK 激活码 |
+| app_version | string \| null | 客户端版本 |
+| platform | string \| null | 平台信息 |
+| metadata | string \| null | 扩展信息 JSON 字符串 |
+| created_by | number \| null | 归属用户 ID；直接调用 `/api/client/feedback` 时为空 |
+| created_at | string | 创建时间 |
 
 ## CDK 状态流转
 

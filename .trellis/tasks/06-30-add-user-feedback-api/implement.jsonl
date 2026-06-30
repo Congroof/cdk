@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend stack, response envelope, and required guideline entry point for Axum/SQLx work."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Where to add new handler/model modules and migrations."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "MySQL table, migration, query, and tenant scoping patterns."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "AppError usage and Chinese error response conventions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend formatting/build verification commands and code style expectations."}

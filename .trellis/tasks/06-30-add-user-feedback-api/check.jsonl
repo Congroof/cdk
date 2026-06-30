@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Check response envelope, handler signatures, and backend conventions."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Check table creation, migration SQL, raw SQL patterns, and tenant filters."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Check validation errors and AppError mappings."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Run and interpret backend format/build checks."}

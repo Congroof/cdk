@@ -53,11 +53,16 @@ async fn main() {
 
     let client_routes = Router::new()
         .route("/client/validate", post(handlers::cdk::validate))
-        .route("/client/activate", post(handlers::cdk::activate));
+        .route("/client/activate", post(handlers::cdk::activate))
+        .route("/client/feedback", post(handlers::feedback::submit));
 
     let user_client_routes = Router::new()
         .route("/client/u/{username}/validate", post(handlers::cdk::user_validate))
-        .route("/client/u/{username}/activate", post(handlers::cdk::user_activate));
+        .route("/client/u/{username}/activate", post(handlers::cdk::user_activate))
+        .route(
+            "/client/u/{username}/feedback",
+            post(handlers::feedback::submit_for_user),
+        );
 
     let app = Router::new()
         .route("/api/auth/login", post(handlers::auth::login))
