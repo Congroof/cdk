@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { KeyRound, Loader2 } from 'lucide-react';
 import api from '../api';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,13 +21,16 @@ export default function Login() {
       const res = await api.post('/auth/login', { username, password });
       if (res.data.success) {
         localStorage.setItem('token', res.data.data.token);
-        navigate('/', { replace: true });
+        navigate(from, { replace: true });
       }
-    } catch (err: any) {
-      if (err.response && err.response.status === 401) {
-        setError(err.response.data?.error || '用户名或密码错误');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        setError(typeof err.response.data?.error === 'string' ? err.response.data.error : '用户名或密码错误');
       } else {
-        setError(err.response?.data?.error || '登录失败，请重试');
+        const message = axios.isAxiosError(err) && typeof err.response?.data?.error === 'string'
+          ? err.response.data.error
+          : '登录失败，请重试';
+        setError(message);
       }
     } finally {
       setLoading(false);

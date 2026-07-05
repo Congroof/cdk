@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import axios from 'axios';
 import { X, Loader2, Copy, Check } from 'lucide-react';
 import api from '../api';
 import { useToast } from './Toast';
 import type { ValidUnit } from '../types';
+import { CDK_DURATION_OPTIONS, DEFAULT_CDK_DURATION_OPTION } from '../utils/cdkOptions';
+import { copyToClipboard } from '../utils/clipboard';
 
 interface Props {
   open: boolean;
@@ -13,8 +16,8 @@ interface Props {
 export default function CreateModal({ open, onClose, onCreated }: Props) {
   const { toast } = useToast();
   const [count, setCount] = useState(1);
-  const [validDuration, setValidDuration] = useState(30);
-  const [validUnit, setValidUnit] = useState<ValidUnit>('days');
+  const [validDuration, setValidDuration] = useState(DEFAULT_CDK_DURATION_OPTION.validDuration);
+  const [validUnit, setValidUnit] = useState<ValidUnit>(DEFAULT_CDK_DURATION_OPTION.validUnit);
   const [remark, setRemark] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string[] | null>(null);
@@ -34,8 +37,11 @@ export default function CreateModal({ open, onClose, onCreated }: Props) {
         setResult(res.data.data.codes);
         onCreated();
       }
-    } catch (err: any) {
-      toast(err.response?.data?.error || '生成失败', 'error');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && typeof err.response?.data?.error === 'string'
+        ? err.response.data.error
+        : '生成失败';
+      toast(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -44,30 +50,11 @@ export default function CreateModal({ open, onClose, onCreated }: Props) {
   const handleCopy = async () => {
     if (!result) return;
     const textToCopy = result.join('\n');
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(textToCopy);
-      } else {
-        const textArea = document.createElement("textarea");
-        textArea.value = textToCopy;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-999999px";
-        textArea.style.top = "-999999px";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {
-          document.execCommand('copy');
-        } catch (err) {
-          console.error('Fallback copy failed', err);
-          throw new Error('复制失败');
-        } finally {
-          textArea.remove();
-        }
-      }
+    const ok = await copyToClipboard(textToCopy);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
+    } else {
       toast('复制失败，请手动选择复制', 'error');
     }
   };
@@ -75,11 +62,16 @@ export default function CreateModal({ open, onClose, onCreated }: Props) {
   const handleClose = () => {
     setResult(null);
     setCount(1);
-    setValidDuration(30);
-    setValidUnit('days');
+    setValidDuration(DEFAULT_CDK_DURATION_OPTION.validDuration);
+    setValidUnit(DEFAULT_CDK_DURATION_OPTION.validUnit);
     setRemark('');
     setCopied(false);
     onClose();
+  };
+
+  const handleDurationSelect = (validDuration: number, validUnit: ValidUnit) => {
+    setValidDuration(validDuration);
+    setValidUnit(validUnit);
   };
 
   if (!open) return null;
@@ -150,39 +142,24 @@ export default function CreateModal({ open, onClose, onCreated }: Props) {
                 <label className="block text-sm font-medium text-slate-300 mb-1.5">
                   有效时长
                 </label>
-                <div className="flex gap-3">
-                  <input
-                    type="number"
-                    min={1}
-                    value={validDuration}
-                    onChange={(e) => setValidDuration(Number(e.target.value))}
-                    className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                    required
-                  />
-                  <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => { setValidUnit('days'); setValidDuration(30); }}
-                      className={`px-4 py-2.5 text-sm font-medium transition-all ${
-                        validUnit === 'days'
-                          ? 'bg-blue-500/20 text-blue-400'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      天
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setValidUnit('hours'); setValidDuration(24); }}
-                      className={`px-4 py-2.5 text-sm font-medium transition-all ${
-                        validUnit === 'hours'
-                          ? 'bg-blue-500/20 text-blue-400'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      小时
-                    </button>
-                  </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {CDK_DURATION_OPTIONS.map((option) => {
+                    const selected = validDuration === option.validDuration && validUnit === option.validUnit;
+                    return (
+                      <button
+                        key={`${option.validDuration}-${option.validUnit}`}
+                        type="button"
+                        onClick={() => handleDurationSelect(option.validDuration, option.validUnit)}
+                        className={`py-2.5 text-sm font-medium rounded-xl border transition-all ${
+                          selected
+                            ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                            : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div>
