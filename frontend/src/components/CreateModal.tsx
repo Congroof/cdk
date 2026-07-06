@@ -4,7 +4,14 @@ import { X, Loader2, Copy, Check } from 'lucide-react';
 import api from '../api';
 import { useToast } from './Toast';
 import type { ValidUnit } from '../types';
-import { CDK_DURATION_OPTIONS, DEFAULT_CDK_DURATION_OPTION } from '../utils/cdkOptions';
+import {
+  CDK_DURATION_OPTIONS,
+  DEFAULT_CDK_DURATION_OPTION,
+  formatCustomCdkDurationSummary,
+  getCustomCdkDurationDays,
+  getDefaultCustomCdkDate,
+  getMinCustomCdkDate,
+} from '../utils/cdkOptions';
 import { copyToClipboard } from '../utils/clipboard';
 
 interface Props {
@@ -18,6 +25,8 @@ export default function CreateModal({ open, onClose, onCreated }: Props) {
   const [count, setCount] = useState(1);
   const [validDuration, setValidDuration] = useState(DEFAULT_CDK_DURATION_OPTION.validDuration);
   const [validUnit, setValidUnit] = useState<ValidUnit>(DEFAULT_CDK_DURATION_OPTION.validUnit);
+  const [usingCustomDate, setUsingCustomDate] = useState(false);
+  const [customDate, setCustomDate] = useState(getDefaultCustomCdkDate);
   const [remark, setRemark] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string[] | null>(null);
@@ -25,12 +34,19 @@ export default function CreateModal({ open, onClose, onCreated }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const submitDuration = usingCustomDate ? getCustomCdkDurationDays(customDate) : validDuration;
+    const submitUnit: ValidUnit = usingCustomDate ? 'days' : validUnit;
+    if (!submitDuration) {
+      toast('请选择今天之后的自定义日期', 'error');
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await api.post('/cdk/generate', {
         count,
-        valid_duration: validDuration,
-        valid_unit: validUnit,
+        valid_duration: submitDuration,
+        valid_unit: submitUnit,
         remark: remark || null,
       });
       if (res.data.success) {
@@ -64,12 +80,15 @@ export default function CreateModal({ open, onClose, onCreated }: Props) {
     setCount(1);
     setValidDuration(DEFAULT_CDK_DURATION_OPTION.validDuration);
     setValidUnit(DEFAULT_CDK_DURATION_OPTION.validUnit);
+    setUsingCustomDate(false);
+    setCustomDate(getDefaultCustomCdkDate());
     setRemark('');
     setCopied(false);
     onClose();
   };
 
   const handleDurationSelect = (validDuration: number, validUnit: ValidUnit) => {
+    setUsingCustomDate(false);
     setValidDuration(validDuration);
     setValidUnit(validUnit);
   };
@@ -142,9 +161,9 @@ export default function CreateModal({ open, onClose, onCreated }: Props) {
                 <label className="block text-sm font-medium text-slate-300 mb-1.5">
                   有效时长
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {CDK_DURATION_OPTIONS.map((option) => {
-                    const selected = validDuration === option.validDuration && validUnit === option.validUnit;
+                    const selected = !usingCustomDate && validDuration === option.validDuration && validUnit === option.validUnit;
                     return (
                       <button
                         key={`${option.validDuration}-${option.validUnit}`}
@@ -160,7 +179,36 @@ export default function CreateModal({ open, onClose, onCreated }: Props) {
                       </button>
                     );
                   })}
+                  <button
+                    type="button"
+                    onClick={() => setUsingCustomDate(true)}
+                    className={`py-2.5 text-sm font-medium rounded-xl border transition-all ${
+                      usingCustomDate
+                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                        : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    自定义日期
+                  </button>
                 </div>
+                {usingCustomDate && (
+                  <div className="mt-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.07] p-3">
+                    <label className="block text-sm font-medium text-slate-300">
+                      自定义日期
+                      <input
+                        type="date"
+                        min={getMinCustomCdkDate()}
+                        value={customDate}
+                        onChange={(e) => setCustomDate(e.target.value)}
+                        className="mt-2 w-full px-3 py-2.5 bg-slate-950/60 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                        required
+                      />
+                    </label>
+                    <p className="mt-2 text-xs text-blue-200/80">
+                      {formatCustomCdkDurationSummary(customDate)}
+                    </p>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1.5">
