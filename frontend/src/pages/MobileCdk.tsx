@@ -10,9 +10,9 @@ import {
   CDK_DURATION_OPTIONS,
   DEFAULT_CDK_DURATION_OPTION,
   formatCustomCdkDurationSummary,
-  getCustomCdkDurationDays,
-  getDefaultCustomCdkDate,
-  getMinCustomCdkDate,
+  getDefaultCustomCdkDuration,
+  getDefaultCustomCdkUnit,
+  getValidCustomCdkDuration,
 } from '../utils/cdkOptions';
 import { copyToClipboard } from '../utils/clipboard';
 import { formatDate } from '../utils/format';
@@ -58,8 +58,9 @@ export default function MobileCdk() {
   const [count, setCount] = useState(1);
   const [validDuration, setValidDuration] = useState(DEFAULT_CDK_DURATION_OPTION.validDuration);
   const [validUnit, setValidUnit] = useState<ValidUnit>(DEFAULT_CDK_DURATION_OPTION.validUnit);
-  const [usingCustomDate, setUsingCustomDate] = useState(false);
-  const [customDate, setCustomDate] = useState(getDefaultCustomCdkDate);
+  const [usingCustomDuration, setUsingCustomDuration] = useState(false);
+  const [customDuration, setCustomDuration] = useState(getDefaultCustomCdkDuration);
+  const [customUnit, setCustomUnit] = useState<ValidUnit>(getDefaultCustomCdkUnit);
   const [remark, setRemark] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generatedCodes, setGeneratedCodes] = useState<string[]>([]);
@@ -103,10 +104,10 @@ export default function MobileCdk() {
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const submitDuration = usingCustomDate ? getCustomCdkDurationDays(customDate) : validDuration;
-    const submitUnit: ValidUnit = usingCustomDate ? 'days' : validUnit;
+    const submitDuration = usingCustomDuration ? getValidCustomCdkDuration(customDuration) : validDuration;
+    const submitUnit: ValidUnit = usingCustomDuration ? customUnit : validUnit;
     if (!submitDuration) {
-      toast('请选择今天之后的自定义日期', 'error');
+      toast('请输入大于 0 的有效时长', 'error');
       return;
     }
 
@@ -160,7 +161,7 @@ export default function MobileCdk() {
   };
 
   const handleDurationSelect = (validDuration: number, validUnit: ValidUnit) => {
-    setUsingCustomDate(false);
+    setUsingCustomDuration(false);
     setValidDuration(validDuration);
     setValidUnit(validUnit);
   };
@@ -248,7 +249,7 @@ export default function MobileCdk() {
                 <span className="mb-1.5 block text-sm font-medium text-slate-300">有效时长</span>
                 <div className="grid grid-cols-2 gap-2">
                   {CDK_DURATION_OPTIONS.map((option) => {
-                    const selected = !usingCustomDate && validDuration === option.validDuration && validUnit === option.validUnit;
+                    const selected = !usingCustomDuration && validDuration === option.validDuration && validUnit === option.validUnit;
                     return (
                       <button
                         key={`${option.validDuration}-${option.validUnit}`}
@@ -266,31 +267,52 @@ export default function MobileCdk() {
                   })}
                   <button
                     type="button"
-                    onClick={() => setUsingCustomDate(true)}
+                    onClick={() => setUsingCustomDuration(true)}
                     className={`min-h-11 rounded-xl border text-sm font-medium transition-all ${
-                      usingCustomDate
+                      usingCustomDuration
                         ? 'border-blue-500/30 bg-blue-500/20 text-blue-300'
                         : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
                     }`}
                   >
-                    自定义日期
+                    自定义时长
                   </button>
                 </div>
-                {usingCustomDate && (
+                {usingCustomDuration && (
                   <div className="mt-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.07] p-3">
                     <label className="block text-sm font-medium text-slate-300">
-                      自定义日期
+                      时长数值
                       <input
-                        type="date"
-                        min={getMinCustomCdkDate()}
-                        value={customDate}
-                        onChange={(e) => setCustomDate(e.target.value)}
-                        className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 text-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={customDuration}
+                        onChange={(e) => setCustomDuration(Number(e.target.value))}
+                        placeholder="例如：7"
+                        className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 text-white placeholder-slate-500 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                         required
                       />
                     </label>
+                    <div className="mt-3 text-sm font-medium text-slate-300">
+                      单位
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        {(['hours', 'days'] as const).map((unit) => (
+                          <button
+                            key={unit}
+                            type="button"
+                            onClick={() => setCustomUnit(unit)}
+                            className={`min-h-11 rounded-xl border transition-all ${
+                              customUnit === unit
+                                ? 'border-blue-500/30 bg-blue-500/20 text-blue-300'
+                                : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                            }`}
+                          >
+                            {unit === 'hours' ? '小时' : '天'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <p className="mt-2 text-xs text-blue-200/80">
-                      {formatCustomCdkDurationSummary(customDate)}
+                      {formatCustomCdkDurationSummary(customDuration, customUnit)}
                     </p>
                   </div>
                 )}
