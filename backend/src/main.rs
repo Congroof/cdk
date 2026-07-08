@@ -45,6 +45,7 @@ async fn main() {
         .route("/cdk/validate", post(handlers::cdk::validate))
         .route("/cdk/activate", post(handlers::cdk::activate))
         .route("/cdk/disable", post(handlers::cdk::disable))
+        .route("/cdk/update-validity", post(handlers::cdk::update_validity))
         .route("/banned/list", get(handlers::banned::list))
         .route("/banned/ban", post(handlers::banned::ban))
         .route("/banned/unban", post(handlers::banned::unban))

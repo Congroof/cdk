@@ -590,6 +590,119 @@ pub async fn activate(
     })))
 }
 
+fn duration_as_hours(duration: i32, unit: &str) -> i64 {
+    match unit {
+        "hours" => duration as i64,
+        _ => duration as i64 * 24,
+    }
+}
+
+pub async fn update_validity(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(payload): Json<UpdateValidityRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+
+    let cdk: Option<CdkRow> = sqlx::query_as(
+        "SELECT id, code, valid_duration, valid_unit, status, machine_code, remark, created_by, created_at, activated_at, expires_at \
+         FROM cdkeys WHERE code = ? AND created_by = ?",
+    )
+    .bind(&payload.code)
+    .bind(user_id.0)
+    .fetch_optional(&state.db)
+    .await?;
+
+    let cdk = cdk.ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
+
+    match cdk.status.as_str() {
+        "unused" => {
+            let valid_duration = payload
+                .valid_duration
+                .ok_or_else(|| AppError::BadRequest("请提供 valid_duration".to_string()))?;
+            if valid_duration <= 0 {
+                return Err(AppError::BadRequest("有效时长须大于 0".to_string()));
+            }
+            let unit = payload.valid_unit.as_deref().unwrap_or("days");
+            if unit != "days" && unit != "hours" {
+                return Err(AppError::BadRequest("单位须为 days 或 hours".to_string()));
+            }
+
+            let result = sqlx::query(
+                "UPDATE cdkeys SET valid_duration = ?, valid_unit = ? WHERE code = ? AND status = 'unused' AND created_by = ?",
+            )
+            .bind(valid_duration)
+            .bind(unit)
+            .bind(&payload.code)
+            .bind(user_id.0)
+            .execute(&state.db)
+            .await?;
+
+            if result.rows_affected() == 0 {
+                return Err(AppError::NotFound("CDK 不存在或状态已变更".to_string()));
+            }
+
+            Ok(Json(serde_json::json!({
+                "success": true,
+                "data": {
+                    "message": "有效期已更新",
+                    "valid_duration": valid_duration,
+                    "valid_unit": unit,
+                },
+            })))
+        }
+        "activated" => {
+            let extend_duration = payload
+                .extend_duration
+                .ok_or_else(|| AppError::BadRequest("请提供 extend_duration".to_string()))?;
+            if extend_duration <= 0 {
+                return Err(AppError::BadRequest("延长时长须大于 0".to_string()));
+            }
+            let unit = payload.extend_unit.as_deref().unwrap_or("days");
+            if unit != "days" && unit != "hours" {
+                return Err(AppError::BadRequest("单位须为 days 或 hours".to_string()));
+            }
+
+            let expires_at = cdk
+                .expires_at
+                .ok_or_else(|| AppError::BadRequest("CDK 缺少过期时间".to_string()))?;
+            let hours = duration_as_hours(extend_duration, unit);
+            let new_expires_at = expires_at + chrono::Duration::hours(hours);
+
+            let result = sqlx::query(
+                "UPDATE cdkeys SET expires_at = ? WHERE code = ? AND status = 'activated' AND created_by = ?",
+            )
+            .bind(new_expires_at)
+            .bind(&payload.code)
+            .bind(user_id.0)
+            .execute(&state.db)
+            .await?;
+
+            if result.rows_affected() == 0 {
+                return Err(AppError::NotFound("CDK 不存在或状态已变更".to_string()));
+            }
+
+            Ok(Json(serde_json::json!({
+                "success": true,
+                "data": {
+                    "message": "过期时间已延长",
+                    "expires_at": new_expires_at,
+                },
+            })))
+        }
+        "expired" => Err(AppError::BadRequest(
+            "已过期 CDK 不支持修改过期时间".to_string(),
+        )),
+        "disabled" => Err(AppError::BadRequest(
+            "已禁用 CDK 不支持修改有效期".to_string(),
+        )),
+        _ => Err(AppError::BadRequest("CDK 状态不支持修改".to_string())),
+    }
+}
+
 pub async fn disable(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,

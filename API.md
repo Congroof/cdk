@@ -63,12 +63,13 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 6 | POST | `/api/cdk/validate` | 是 | 验证 CDK（管理端） |
 | 7 | POST | `/api/cdk/activate` | 是 | 激活 CDK（管理端） |
 | 8 | POST | `/api/cdk/disable` | 是 | 禁用 CDK |
-| 9 | POST | `/api/client/validate` | 否 | 验证 CDK（客户端） |
-| 10 | POST | `/api/client/activate` | 否 | 激活 CDK（客户端） |
-| 11 | POST | `/api/client/feedback` | 否 | 提交用户反馈 |
-| 12 | POST | `/api/client/u/{username}/feedback` | 否 | 提交指定用户归属的用户反馈 |
-| 13 | GET | `/api/feedback/list` | 是 | 分页查询用户反馈 |
-| 14 | POST | `/api/feedback/set-done` | 是 | 标记反馈是否已完成 |
+| 9 | POST | `/api/cdk/update-validity` | 是 | 修改未使用 CDK 有效期 / 延长已激活 CDK 过期时间 |
+| 10 | POST | `/api/client/validate` | 否 | 验证 CDK（客户端） |
+| 11 | POST | `/api/client/activate` | 否 | 激活 CDK（客户端） |
+| 12 | POST | `/api/client/feedback` | 否 | 提交用户反馈 |
+| 13 | POST | `/api/client/u/{username}/feedback` | 否 | 提交指定用户归属的用户反馈 |
+| 14 | GET | `/api/feedback/list` | 是 | 分页查询用户反馈 |
+| 15 | POST | `/api/feedback/set-done` | 是 | 标记反馈是否已完成 |
 
 > `/api/client/*` 和 `/api/cdk/validate|activate` 使用相同的处理逻辑，区别仅在于是否需要 JWT 认证。
 
@@ -502,7 +503,92 @@ curl -X POST http://localhost/api/cdk/disable \
 
 ---
 
-## 9. 提交用户反馈
+## 9. 修改 CDK 有效期 / 延长过期时间
+
+### `POST /api/cdk/update-validity`
+
+修改未使用 CDK 的有效期配置，或延长已激活 CDK 的过期时间。仅支持 `unused` 和 `activated` 状态。
+
+**请求头**：`Authorization: Bearer <token>`
+
+**请求参数**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| code | string | 是 | CDK 激活码 |
+| valid_duration | number | unused 时必填 | 新的有效时长，必须大于 0 |
+| valid_unit | string | 否 | 时长单位：`"days"`（默认）或 `"hours"`，仅 unused 时使用 |
+| extend_duration | number | activated 时必填 | 延长时长，必须大于 0 |
+| extend_unit | string | 否 | 延长单位：`"days"`（默认）或 `"hours"`，仅 activated 时使用 |
+
+**业务规则**：
+
+- `unused`：更新 `valid_duration` / `valid_unit`，激活时按新配置计算 `expires_at`
+- `activated`：在当前 `expires_at` 基础上延长指定时长
+- `expired` / `disabled`：返回 400，不支持修改
+
+**调用示例（修改未使用 CDK 有效期）**：
+
+```bash
+curl -X POST http://localhost/api/cdk/update-validity \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGci..." \
+  -d '{
+    "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
+    "valid_duration": 7,
+    "valid_unit": "days"
+  }'
+```
+
+**成功响应（unused）**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "有效期已更新",
+    "valid_duration": 7,
+    "valid_unit": "days"
+  }
+}
+```
+
+**调用示例（延长已激活 CDK 过期时间）**：
+
+```bash
+curl -X POST http://localhost/api/cdk/update-validity \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGci..." \
+  -d '{
+    "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
+    "extend_duration": 24,
+    "extend_unit": "hours"
+  }'
+```
+
+**成功响应（activated）**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "过期时间已延长",
+    "expires_at": "2026-06-14T15:30:00"
+  }
+}
+```
+
+**错误响应**：
+
+```json
+{ "success": false, "error": "CDK 不存在" }
+{ "success": false, "error": "已过期 CDK 不支持修改过期时间" }
+{ "success": false, "error": "已禁用 CDK 不支持修改有效期" }
+```
+
+---
+
+## 10. 提交用户反馈
 
 ### `POST /api/client/feedback`
 ### `POST /api/client/u/{username}/feedback`
@@ -575,7 +661,7 @@ curl -X POST http://localhost/api/client/u/admin/feedback \
 
 ---
 
-## 10. 查询用户反馈
+## 11. 查询用户反馈
 
 ### `GET /api/feedback/list`
 
@@ -636,7 +722,7 @@ curl -X GET "http://localhost/api/feedback/list?page=1&page_size=10&is_done=fals
 
 ---
 
-## 11. 标记反馈完成状态
+## 12. 标记反馈完成状态
 
 ### `POST /api/feedback/set-done`
 

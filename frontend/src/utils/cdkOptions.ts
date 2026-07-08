@@ -35,3 +35,9 @@ export function formatCustomCdkDurationSummary(duration: number, unit: ValidUnit
   if (!validDuration) return '请输入大于 0 的整数';
   return `按 ${validDuration} ${unit === 'hours' ? '小时' : '天'}生成`;
 }
+
+export function addDurationToDate(dateStr: string, duration: number, unit: ValidUnit): Date {
+  const date = new Date(dateStr + 'Z');
+  const hours = unit === 'hours' ? duration : duration * 24;
+  return new Date(date.getTime() + hours * 60 * 60 * 1000);
+}

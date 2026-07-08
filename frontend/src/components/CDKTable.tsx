@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Ban, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Ban, ChevronLeft, ChevronRight, Clock, Pencil } from 'lucide-react';
 import type { Cdk, CdkStatus } from '../types';
 import api from '../api';
 import { useToast } from './Toast';
 import { formatDate } from '../utils/format';
 import CopyButton from './CopyButton';
+import EditValidityModal from './EditValidityModal';
 
 const statusConfig: Record<CdkStatus, { label: string; className: string }> = {
   unused: {
@@ -45,6 +46,7 @@ export default function CDKTable({
   const { toast } = useToast();
   const [disabling, setDisabling] = useState<number | null>(null);
   const [confirmCode, setConfirmCode] = useState<string | null>(null);
+  const [editingCdk, setEditingCdk] = useState<Cdk | null>(null);
 
   const totalPages = Math.ceil(total / pageSize);
 
@@ -152,16 +154,36 @@ export default function CDKTable({
                     <td className="px-4 py-3 text-slate-400">{formatDate(item.created_at)}</td>
                     <td className="px-4 py-3 text-slate-400">{formatDate(item.expires_at)}</td>
                     <td className="px-4 py-3 text-right">
-                      {item.status !== 'disabled' && (
-                        <button
-                          onClick={() => handleDisableConfirm(item.code)}
-                          disabled={disabling !== null}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 rounded-lg transition-all disabled:opacity-50"
-                        >
-                          <Ban className="w-3.5 h-3.5" />
-                          禁用
-                        </button>
-                      )}
+                      <div className="inline-flex items-center gap-2">
+                        {item.status === 'unused' && (
+                          <button
+                            onClick={() => setEditingCdk(item)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 bg-blue-500/5 hover:bg-blue-500/10 border border-blue-500/10 rounded-lg transition-all"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            编辑有效期
+                          </button>
+                        )}
+                        {item.status === 'activated' && (
+                          <button
+                            onClick={() => setEditingCdk(item)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-emerald-400 hover:text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/10 rounded-lg transition-all"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                            延长
+                          </button>
+                        )}
+                        {item.status !== 'disabled' && (
+                          <button
+                            onClick={() => handleDisableConfirm(item.code)}
+                            disabled={disabling !== null}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 rounded-lg transition-all disabled:opacity-50"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                            禁用
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -221,6 +243,12 @@ export default function CDKTable({
           </div>
         </div>
       )}
+
+      <EditValidityModal
+        cdk={editingCdk}
+        onClose={() => setEditingCdk(null)}
+        onSaved={onRefresh}
+      />
     </div>
   );
 }

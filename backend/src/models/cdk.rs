@@ -111,6 +111,15 @@ pub struct DisableRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct UpdateValidityRequest {
+    pub code: String,
+    pub valid_duration: Option<i32>,
+    pub valid_unit: Option<String>,
+    pub extend_duration: Option<i32>,
+    pub extend_unit: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct ListQuery {
     pub page: Option<u32>,
     pub page_size: Option<u32>,
