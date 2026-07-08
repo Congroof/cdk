@@ -29,17 +29,17 @@ export default function EditValidityModal({ cdk, onClose, onSaved }: Props) {
   const [customUnit, setCustomUnit] = useState<ValidUnit>(getDefaultCustomCdkUnit);
   const [loading, setLoading] = useState(false);
 
-  if (!cdk) return null;
-
-  const isUnused = cdk.status === 'unused';
-
   const submitDuration = usingCustomDuration ? getValidCustomCdkDuration(customDuration) : validDuration;
   const submitUnit: ValidUnit = usingCustomDuration ? customUnit : validUnit;
 
   const previewExpiresAt = useMemo(() => {
-    if (cdk.status !== 'activated' || !cdk.expires_at || !submitDuration) return null;
+    if (!cdk || cdk.status !== 'activated' || !cdk.expires_at || !submitDuration) return null;
     return addDurationToDate(cdk.expires_at, submitDuration, submitUnit);
-  }, [cdk.status, cdk.expires_at, submitDuration, submitUnit]);
+  }, [cdk, submitDuration, submitUnit]);
+
+  if (!cdk) return null;
+
+  const isUnused = cdk.status === 'unused';
 
   const handleDurationSelect = (duration: number, unit: ValidUnit) => {
     setUsingCustomDuration(false);
