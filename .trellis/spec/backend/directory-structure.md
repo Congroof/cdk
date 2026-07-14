@@ -18,7 +18,9 @@ backend/
 ├── .env / .env.example
 ├── migrations/          # SQL migration files (manual, numbered)
 │   ├── 001_init.sql
-│   └── 002_add_created_by.sql
+│   ├── 002_add_created_by.sql
+│   ├── 003_create_user_feedback.sql
+│   └── 004_add_feedback_done_fields.sql
 └── src/
     ├── main.rs          # Entry point: AppState, router, server startup
     ├── config.rs        # Config struct loaded from env vars
@@ -28,7 +30,8 @@ backend/
     │   ├── mod.rs
     │   ├── auth.rs      # Login handler
     │   ├── cdk.rs       # CDK CRUD + validate/activate
-    │   └── banned.rs    # Machine ban handlers
+    │   ├── banned.rs    # Machine ban handlers
+    │   └── feedback.rs  # Client feedback submit + admin list/set-done
     ├── middleware/       # Axum middleware layers
     │   ├── mod.rs
     │   └── auth.rs      # JWT auth middleware
@@ -36,14 +39,15 @@ backend/
         ├── mod.rs
         ├── user.rs
         ├── cdk.rs
-        └── banned.rs
+        ├── banned.rs
+        └── feedback.rs
 ```
 
 ---
 
 ## Module Organization
 
-- **One handler file per domain** (auth, cdk, banned). All handler functions for that domain live in the same file.
+- **One handler file per domain** (auth, cdk, banned, feedback). All handler functions for that domain live in the same file.
 - **Models mirror handlers**: each handler file has a corresponding model file with its request structs, response structs, and DB row types.
 - **No service layer**: business logic lives directly in handler functions. The codebase is small enough that handlers call SQLx directly.
 
@@ -57,7 +61,7 @@ backend/
 | Handler functions | snake_case verb | `generate`, `validate`, `list` |
 | Struct names | PascalCase | `CdkRow`, `GenerateRequest` |
 | Enum variants | PascalCase | `AppError::BadRequest` |
-| SQL table names | snake_case plural | `cdkeys`, `usage_logs`, `banned_machines` |
+| SQL table names | snake_case plural | `cdkeys`, `usage_logs`, `banned_machines`, `user_feedback` |
 | Route paths | kebab-case or slash-separated nouns | `/api/cdk/list`, `/api/client/validate` |
 
 ---

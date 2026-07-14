@@ -23,6 +23,7 @@ Before writing backend code, read these guideline files:
 3. [Error Handling](./error-handling.md) — AppError enum, response format, when to use each variant
 4. [Logging Guidelines](./logging-guidelines.md) — what/when/how to log
 5. [Quality Guidelines](./quality-guidelines.md) — code style, build commands, anti-patterns
+6. [Feedback API](./feedback-api.md) — when touching user feedback routes/schema
 
 ---
 
@@ -35,6 +36,7 @@ Before writing backend code, read these guideline files:
 | [Error Handling](./error-handling.md) | AppError enum, HTTP mapping, conventions | Filled |
 | [Logging Guidelines](./logging-guidelines.md) | tracing usage, log levels | Filled |
 | [Quality Guidelines](./quality-guidelines.md) | Code style, linting, anti-patterns | Filled |
+| [Feedback API](./feedback-api.md) | Client/admin feedback contracts and visibility | Filled |
 
 ---
 

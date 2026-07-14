@@ -34,10 +34,12 @@ frontend/
     │   ├── ExportModal.tsx # Export filter modal
     │   ├── Toast.tsx       # Toast notification system (context + provider)
     │   ├── UsageStats.tsx  # Usage statistics dashboard
-    │   └── BannedMachines.tsx  # Ban management component
+    │   ├── BannedMachines.tsx  # Ban management component
+    │   └── FeedbackList.tsx    # User feedback list / filters / set-done
     ├── pages/              # Route-level page components
     │   ├── Login.tsx       # Login form
-    │   └── Dashboard.tsx   # Main dashboard (tabs: CDK / Stats / Banned)
+    │   ├── MobileCdk.tsx   # Mobile CDK management UI
+    │   └── Dashboard.tsx   # Main dashboard (tabs: CDK / Stats / Banned / Feedback)
     └── types/
         └── index.ts        # Shared TypeScript interfaces
 ```
