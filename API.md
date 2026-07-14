@@ -760,6 +760,8 @@ curl -X POST http://localhost/api/feedback/set-done \
 }
 ```
 
+当 `is_done` 为 `false` 时，`message` 为 `"反馈已标记待处理"`。
+
 **错误响应**：
 
 ```json
@@ -797,7 +799,7 @@ curl -X POST http://localhost/api/feedback/set-done \
 | cdk_code | string \| null | CDK 激活码 |
 | app_version | string \| null | 客户端版本 |
 | platform | string \| null | 平台信息 |
-| metadata | string \| null | 扩展信息 JSON 字符串 |
+| metadata | object \| null | 扩展信息；库内以 JSON 文本存储，查询接口反序列化为 JSON 对象返回；非法 JSON 时返回 `null` |
 | created_by | number \| null | 归属用户 ID；直接调用 `/api/client/feedback` 时为空 |
 | is_done | boolean | 是否已完成，默认 `false` |
 | done_at | string \| null | 标记完成时间；重新打开后为空 |

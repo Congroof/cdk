@@ -105,8 +105,11 @@ export default function FeedbackList() {
         is_done: isDone,
       });
       if (res.data.success) {
-        toast(isDone ? '反馈已标记完成' : '反馈已重新打开', 'success');
-        fetchData();
+        const message =
+          (res.data.data as { message?: string } | undefined)?.message ??
+          (isDone ? '反馈已标记完成' : '反馈已标记待处理');
+        toast(message, 'success');
+        void fetchData();
       }
     } catch (err: unknown) {
       toast(getErrorMessage(err, '更新失败'), 'error');
