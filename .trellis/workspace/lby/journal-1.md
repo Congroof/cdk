@@ -76,3 +76,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: 支持反馈结果查询与后台回复
+
+**Date**: 2026-07-14
+**Task**: 支持反馈结果查询与后台回复
+**Branch**: `main`
+
+### Summary
+
+新增按机器码分页查询反馈结果的客户端接口、管理端反馈回复接口与后台回复交互；回复和完成状态保持独立，并同步数据库迁移、API 文档和反馈代码规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `85ce77e` | (see git log) |
+| `1c266ba` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
