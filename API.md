@@ -70,6 +70,9 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 13 | POST | `/api/client/u/{username}/feedback` | 否 | 提交指定用户归属的用户反馈 |
 | 14 | GET | `/api/feedback/list` | 是 | 分页查询用户反馈 |
 | 15 | POST | `/api/feedback/set-done` | 是 | 标记反馈是否已完成 |
+| 16 | POST | `/api/client/feedback/query` | 否 | 按机器码查询匿名反馈及处理结果 |
+| 17 | POST | `/api/client/u/{username}/feedback/query` | 否 | 按机器码查询指定用户归属的反馈及处理结果 |
+| 18 | POST | `/api/feedback/reply` | 是 | 保存或修改反馈回复 |
 
 > `/api/client/*` 和 `/api/cdk/validate|activate` 使用相同的处理逻辑，区别仅在于是否需要 JWT 认证。
 
@@ -661,7 +664,75 @@ curl -X POST http://localhost/api/client/u/admin/feedback \
 
 ---
 
-## 11. 查询用户反馈
+## 11. 客户端查询反馈结果
+
+### `POST /api/client/feedback/query`
+### `POST /api/client/u/{username}/feedback/query`
+
+客户端按机器码精确查询自己提交的反馈及管理员回复。接口无需 JWT 认证；机器码放在请求体中，不会出现在 URL 和常规访问日志里。
+
+默认接口只返回通过 `/api/client/feedback` 提交的匿名反馈；带用户名的接口返回该用户名归属的反馈以及匿名反馈，与该用户管理后台的可见范围保持一致。用户名不存在时返回 404。
+
+**请求参数**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| machine_code | string | 是 | 机器码，精确匹配，不能为空，最长 256 字符 |
+| page | number | 否 | 页码，默认 1，最小值 1 |
+| page_size | number | 否 | 每页条数，默认 20，范围 1-50 |
+
+**调用示例**：
+
+```bash
+curl -X POST http://localhost/api/client/u/admin/feedback/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "machine_code": "MACHINE-001",
+    "page": 1,
+    "page_size": 20
+  }'
+```
+
+**成功响应**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "feedback_type": "feature",
+        "content": "希望增加离线激活说明",
+        "is_done": false,
+        "reply": "已纳入后续版本计划",
+        "replied_at": "2026-07-14T10:00:00",
+        "done_at": null,
+        "created_at": "2026-07-14T09:00:00"
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "page_size": 20
+  }
+}
+```
+
+没有匹配记录时返回成功响应，`items` 为空且 `total` 为 `0`。客户端响应使用专用字段白名单，不会返回联系方式、CDK、扩展信息、归属用户、应用版本或平台等管理端信息。
+
+> 安全提示：机器码在该接口中等同于查询凭据。客户端不应公开、分享或写入可上传的普通日志；服务端及反向代理也不应记录请求体。
+
+**错误响应**：
+
+```json
+{ "success": false, "error": "机器码不能为空" }
+{ "success": false, "error": "机器码过长" }
+{ "success": false, "error": "用户不存在" }
+```
+
+---
+
+## 12. 管理端查询用户反馈
 
 ### `GET /api/feedback/list`
 
@@ -705,6 +776,8 @@ curl -X GET "http://localhost/api/feedback/list?page=1&page_size=10&is_done=fals
         "metadata": {
           "os_version": "Windows 11"
         },
+        "reply": "正在排查，将在下个版本修复",
+        "replied_at": "2026-07-14T10:00:00",
         "created_by": null,
         "is_done": false,
         "done_at": null,
@@ -722,7 +795,7 @@ curl -X GET "http://localhost/api/feedback/list?page=1&page_size=10&is_done=fals
 
 ---
 
-## 12. 标记反馈完成状态
+## 13. 标记反馈完成状态
 
 ### `POST /api/feedback/set-done`
 
@@ -762,9 +835,61 @@ curl -X POST http://localhost/api/feedback/set-done \
 
 当 `is_done` 为 `false` 时，`message` 为 `"反馈已标记待处理"`。
 
+完成状态与反馈回复相互独立：标记完成或重新打开都不会修改、清除已有回复。
+
 **错误响应**：
 
 ```json
+{ "success": false, "error": "反馈记录不存在" }
+```
+
+---
+
+## 14. 回复用户反馈
+
+### `POST /api/feedback/reply`
+
+保存或修改反馈回复。该接口需要 JWT 认证，只能更新当前登录用户可见的反馈。
+
+回复用于向客户端说明处理结果、当前进展或后续计划，不会自动改变反馈的完成状态。需要完成或重新打开时，继续调用 `/api/feedback/set-done`。
+
+**请求头**：`Authorization: Bearer <token>`
+
+**请求参数**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | number | 是 | 反馈记录 ID |
+| reply | string | 是 | 回复内容，去除首尾空白后不能为空，最长 5000 字符 |
+
+**调用示例**：
+
+```bash
+curl -X POST http://localhost/api/feedback/reply \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGci..." \
+  -d '{
+    "id": 1,
+    "reply": "已纳入后续版本计划"
+  }'
+```
+
+**成功响应**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "反馈回复已保存"
+  }
+}
+```
+
+**错误响应**：
+
+```json
+{ "success": false, "error": "反馈回复不能为空" }
+{ "success": false, "error": "反馈回复过长" }
 { "success": false, "error": "反馈记录不存在" }
 ```
 
@@ -800,6 +925,8 @@ curl -X POST http://localhost/api/feedback/set-done \
 | app_version | string \| null | 客户端版本 |
 | platform | string \| null | 平台信息 |
 | metadata | object \| null | 扩展信息；库内以 JSON 文本存储，查询接口反序列化为 JSON 对象返回；非法 JSON 时返回 `null` |
+| reply | string \| null | 管理员回复；可描述结果、进展或计划 |
+| replied_at | string \| null | 最近一次保存回复的时间 |
 | created_by | number \| null | 归属用户 ID；直接调用 `/api/client/feedback` 时为空 |
 | is_done | boolean | 是否已完成，默认 `false` |
 | done_at | string \| null | 标记完成时间；重新打开后为空 |

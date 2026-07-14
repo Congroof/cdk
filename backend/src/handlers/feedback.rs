@@ -16,6 +16,9 @@ const MAX_CDK_CODE_LEN: usize = 64;
 const MAX_APP_VERSION_LEN: usize = 64;
 const MAX_PLATFORM_LEN: usize = 64;
 const MAX_METADATA_LEN: usize = 10000;
+const MAX_REPLY_LEN: usize = 5000;
+const DEFAULT_CLIENT_PAGE_SIZE: u32 = 20;
+const MAX_CLIENT_PAGE_SIZE: u32 = 50;
 
 pub async fn submit(
     State(state): State<AppState>,
@@ -36,6 +39,27 @@ pub async fn submit_for_user(
         .ok_or_else(|| AppError::NotFound("用户不存在".to_string()))?;
 
     insert_feedback(&state, Some(owner_id.0), payload).await
+}
+
+pub async fn query_for_client(
+    State(state): State<AppState>,
+    Json(payload): Json<ClientFeedbackQueryRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    query_client_feedback(&state, None, payload).await
+}
+
+pub async fn query_for_user_client(
+    State(state): State<AppState>,
+    Path(username): Path<String>,
+    Json(payload): Json<ClientFeedbackQueryRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let owner_id = sqlx::query_as::<_, (i64,)>("SELECT id FROM users WHERE username = ?")
+        .bind(&username)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("用户不存在".to_string()))?;
+
+    query_client_feedback(&state, Some(owner_id.0), payload).await
 }
 
 pub async fn list(
@@ -177,6 +201,123 @@ pub async fn set_done(
         "success": true,
         "data": {
             "message": if payload.is_done { "反馈已标记完成" } else { "反馈已标记待处理" },
+        },
+    })))
+}
+
+pub async fn reply(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(payload): Json<ReplyFeedbackRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+
+    let reply = payload.reply.trim().to_string();
+    if reply.is_empty() {
+        return Err(AppError::BadRequest("反馈回复不能为空".to_string()));
+    }
+    if reply.chars().count() > MAX_REPLY_LEN {
+        return Err(AppError::BadRequest("反馈回复过长".to_string()));
+    }
+
+    let result = sqlx::query(
+        "UPDATE user_feedback SET reply = ?, replied_at = ? \
+         WHERE id = ? AND (created_by = ? OR created_by IS NULL)",
+    )
+    .bind(&reply)
+    .bind(Utc::now().naive_utc())
+    .bind(payload.id)
+    .bind(user_id.0)
+    .execute(&state.db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("反馈记录不存在".to_string()));
+    }
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "message": "反馈回复已保存",
+        },
+    })))
+}
+
+async fn query_client_feedback(
+    state: &AppState,
+    owner_id: Option<i64>,
+    payload: ClientFeedbackQueryRequest,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let machine_code = payload.machine_code.trim().to_string();
+    if machine_code.is_empty() {
+        return Err(AppError::BadRequest("机器码不能为空".to_string()));
+    }
+    if machine_code.chars().count() > MAX_MACHINE_CODE_LEN {
+        return Err(AppError::BadRequest("机器码过长".to_string()));
+    }
+
+    let page = payload.page.unwrap_or(1).max(1);
+    let page_size = payload
+        .page_size
+        .unwrap_or(DEFAULT_CLIENT_PAGE_SIZE)
+        .clamp(1, MAX_CLIENT_PAGE_SIZE);
+    let offset = u64::from(page - 1) * u64::from(page_size);
+    let select_fields =
+        "id, feedback_type, content, is_done, reply, replied_at, done_at, created_at";
+
+    let (total, items): (i64, Vec<ClientFeedbackItem>) = if let Some(owner_id) = owner_id {
+        let total: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM user_feedback \
+             WHERE machine_code = ? AND (created_by = ? OR created_by IS NULL)",
+        )
+        .bind(&machine_code)
+        .bind(owner_id)
+        .fetch_one(&state.db)
+        .await?;
+        let sql = format!(
+            "SELECT {select_fields} FROM user_feedback \
+             WHERE machine_code = ? AND (created_by = ? OR created_by IS NULL) \
+             ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
+        );
+        let items = sqlx::query_as::<_, ClientFeedbackItem>(&sql)
+            .bind(&machine_code)
+            .bind(owner_id)
+            .bind(page_size)
+            .bind(offset)
+            .fetch_all(&state.db)
+            .await?;
+        (total.0, items)
+    } else {
+        let total: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM user_feedback WHERE machine_code = ? AND created_by IS NULL",
+        )
+        .bind(&machine_code)
+        .fetch_one(&state.db)
+        .await?;
+        let sql = format!(
+            "SELECT {select_fields} FROM user_feedback \
+             WHERE machine_code = ? AND created_by IS NULL \
+             ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
+        );
+        let items = sqlx::query_as::<_, ClientFeedbackItem>(&sql)
+            .bind(&machine_code)
+            .bind(page_size)
+            .bind(offset)
+            .fetch_all(&state.db)
+            .await?;
+        (total.0, items)
+    };
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
         },
     })))
 }

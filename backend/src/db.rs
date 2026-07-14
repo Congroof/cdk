@@ -126,6 +126,8 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
             app_version VARCHAR(64) NULL,
             platform VARCHAR(64) NULL,
             metadata TEXT NULL,
+            reply TEXT NULL,
+            replied_at DATETIME NULL,
             created_by BIGINT NULL,
             is_done BOOLEAN NOT NULL DEFAULT FALSE,
             done_at DATETIME NULL,
@@ -155,6 +157,15 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
     let _ = sqlx::query("ALTER TABLE user_feedback ADD INDEX idx_feedback_is_done (is_done)")
         .execute(&pool)
         .await;
+
+    let _ = sqlx::query("ALTER TABLE user_feedback ADD COLUMN reply TEXT NULL AFTER metadata")
+        .execute(&pool)
+        .await;
+
+    let _ =
+        sqlx::query("ALTER TABLE user_feedback ADD COLUMN replied_at DATETIME NULL AFTER reply")
+            .execute(&pool)
+            .await;
 
     tracing::info!("Database '{}' ready", db_name);
     pool

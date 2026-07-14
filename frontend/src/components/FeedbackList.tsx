@@ -4,9 +4,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
+  MessageSquareReply,
   MessageSquareText,
   RefreshCw,
   Search,
+  Send,
+  X,
 } from 'lucide-react';
 import api from '../api';
 import type { FeedbackListResponse, UserFeedback } from '../types';
@@ -50,6 +53,9 @@ export default function FeedbackList() {
   const [searchInput, setSearchInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [replyingItem, setReplyingItem] = useState<UserFeedback | null>(null);
+  const [replyInput, setReplyInput] = useState('');
+  const [savingReply, setSavingReply] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -115,6 +121,48 @@ export default function FeedbackList() {
       toast(getErrorMessage(err, '更新失败'), 'error');
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const openReplyEditor = (item: UserFeedback) => {
+    setReplyingItem(item);
+    setReplyInput(item.reply ?? '');
+  };
+
+  const closeReplyEditor = () => {
+    if (savingReply) return;
+    setReplyingItem(null);
+    setReplyInput('');
+  };
+
+  const handleSaveReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyingItem) return;
+
+    const reply = replyInput.trim();
+    if (!reply) {
+      toast('反馈回复不能为空', 'error');
+      return;
+    }
+
+    setSavingReply(true);
+    try {
+      const res = await api.post('/feedback/reply', {
+        id: replyingItem.id,
+        reply,
+      });
+      if (res.data.success) {
+        const message =
+          (res.data.data as { message?: string } | undefined)?.message ?? '反馈回复已保存';
+        toast(message, 'success');
+        setReplyingItem(null);
+        setReplyInput('');
+        void fetchData();
+      }
+    } catch (err: unknown) {
+      toast(getErrorMessage(err, '回复保存失败'), 'error');
+    } finally {
+      setSavingReply(false);
     }
   };
 
@@ -243,6 +291,20 @@ export default function FeedbackList() {
                           </span>
                         )}
                       </div>
+                      {item.reply && (
+                        <div className="mt-3 rounded-lg border border-indigo-500/15 bg-indigo-500/5 px-3 py-2">
+                          <div className="flex items-center gap-1.5 text-xs text-indigo-300 mb-1">
+                            <MessageSquareReply className="w-3.5 h-3.5" />
+                            管理员回复
+                            {item.replied_at && (
+                              <span className="text-slate-500">· {formatDate(item.replied_at)}</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-slate-300 whitespace-pre-wrap break-words">
+                            {item.reply}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
@@ -291,22 +353,31 @@ export default function FeedbackList() {
                     {formatDate(item.created_at)}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <button
-                      onClick={() => handleSetDone(item, !item.is_done)}
-                      disabled={updatingId === item.id}
-                      className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium border rounded-lg transition-all disabled:opacity-50 ${
-                        item.is_done
-                          ? 'text-amber-400 hover:text-amber-300 bg-amber-500/5 hover:bg-amber-500/10 border-amber-500/10'
-                          : 'text-emerald-400 hover:text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 border-emerald-500/10'
-                      }`}
-                    >
-                      {item.is_done ? (
-                        <Circle className="w-3.5 h-3.5" />
-                      ) : (
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                      )}
-                      {item.is_done ? '重新打开' : '标记完成'}
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => openReplyEditor(item)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-400 hover:text-indigo-300 bg-indigo-500/5 hover:bg-indigo-500/10 border border-indigo-500/10 rounded-lg transition-all"
+                      >
+                        <MessageSquareReply className="w-3.5 h-3.5" />
+                        {item.reply ? '编辑回复' : '回复'}
+                      </button>
+                      <button
+                        onClick={() => handleSetDone(item, !item.is_done)}
+                        disabled={updatingId === item.id}
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium border rounded-lg transition-all disabled:opacity-50 ${
+                          item.is_done
+                            ? 'text-amber-400 hover:text-amber-300 bg-amber-500/5 hover:bg-amber-500/10 border-amber-500/10'
+                            : 'text-emerald-400 hover:text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 border-emerald-500/10'
+                        }`}
+                      >
+                        {item.is_done ? (
+                          <Circle className="w-3.5 h-3.5" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
+                        {item.is_done ? '重新打开' : '标记完成'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -336,6 +407,69 @@ export default function FeedbackList() {
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
+        </div>
+      )}
+
+      {replyingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeReplyEditor} />
+          <form
+            onSubmit={handleSaveReply}
+            className="relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6"
+          >
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <div>
+                <h3 className="text-lg font-semibold text-white">
+                  {replyingItem.reply ? '编辑反馈回复' : '回复反馈'}
+                </h3>
+                <p className="text-sm text-slate-500 mt-1 line-clamp-2">
+                  {replyingItem.content}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeReplyEditor}
+                disabled={savingReply}
+                className="p-1.5 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors disabled:opacity-50"
+                aria-label="关闭"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <textarea
+              value={replyInput}
+              onChange={(e) => setReplyInput(e.target.value)}
+              maxLength={5000}
+              rows={7}
+              autoFocus
+              placeholder="输入处理结果、计划或其他需要告知客户端用户的内容"
+              className="w-full resize-y rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+            />
+            <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
+              <span>回复与完成状态相互独立</span>
+              <span>{replyInput.length}/5000</span>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                type="button"
+                onClick={closeReplyEditor}
+                disabled={savingReply}
+                className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-white/10 rounded-xl transition-colors disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                disabled={savingReply || !replyInput.trim()}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+                {savingReply ? '保存中...' : '保存回复'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

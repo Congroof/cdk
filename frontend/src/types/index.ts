@@ -92,6 +92,8 @@ export interface UserFeedback {
   app_version: string | null;
   platform: string | null;
   metadata: unknown | null;
+  reply: string | null;
+  replied_at: string | null;
   created_by: number | null;
   is_done: boolean;
   done_at: string | null;

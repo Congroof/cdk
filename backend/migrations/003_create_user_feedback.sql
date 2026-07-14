@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS user_feedback (
     app_version VARCHAR(64) NULL,
     platform VARCHAR(64) NULL,
     metadata TEXT NULL,
+    reply TEXT NULL,
+    replied_at DATETIME NULL,
     created_by BIGINT NULL,
     is_done BOOLEAN NOT NULL DEFAULT FALSE,
     done_at DATETIME NULL,

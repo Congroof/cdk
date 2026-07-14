@@ -51,6 +51,7 @@ async fn main() {
         .route("/banned/unban", post(handlers::banned::unban))
         .route("/feedback/list", get(handlers::feedback::list))
         .route("/feedback/set-done", post(handlers::feedback::set_done))
+        .route("/feedback/reply", post(handlers::feedback::reply))
         .route_layer(axum_mw::from_fn_with_state(
             state.clone(),
             middleware::auth::auth_middleware,
@@ -59,7 +60,11 @@ async fn main() {
     let client_routes = Router::new()
         .route("/client/validate", post(handlers::cdk::validate))
         .route("/client/activate", post(handlers::cdk::activate))
-        .route("/client/feedback", post(handlers::feedback::submit));
+        .route("/client/feedback", post(handlers::feedback::submit))
+        .route(
+            "/client/feedback/query",
+            post(handlers::feedback::query_for_client),
+        );
 
     let user_client_routes = Router::new()
         .route(
@@ -73,6 +78,10 @@ async fn main() {
         .route(
             "/client/u/{username}/feedback",
             post(handlers::feedback::submit_for_user),
+        )
+        .route(
+            "/client/u/{username}/feedback/query",
+            post(handlers::feedback::query_for_user_client),
         );
 
     let app = Router::new()
