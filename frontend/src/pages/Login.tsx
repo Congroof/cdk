@@ -1,17 +1,39 @@
 import { useState } from 'react';
 import axios from 'axios';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { KeyRound, Loader2 } from 'lucide-react';
 import api from '../api';
 
+const REMEMBER_KEY = 'cdk_remember';
+const USERNAME_KEY = 'cdk_username';
+const PASSWORD_KEY = 'cdk_password';
+
+function loadRememberedCredentials() {
+  if (localStorage.getItem(REMEMBER_KEY) !== '1') {
+    return { username: '', password: '', remember: false };
+  }
+  return {
+    username: localStorage.getItem(USERNAME_KEY) ?? '',
+    password: localStorage.getItem(PASSWORD_KEY) ?? '',
+    remember: true,
+  };
+}
+
+function isMobileClient() {
+  return (
+    window.matchMedia('(max-width: 768px)').matches ||
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+  );
+}
+
 export default function Login() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const remembered = loadRememberedCredentials();
+  const [username, setUsername] = useState(remembered.username);
+  const [password, setPassword] = useState(remembered.password);
+  const [remember, setRemember] = useState(remembered.remember);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +43,16 @@ export default function Login() {
       const res = await api.post('/auth/login', { username, password });
       if (res.data.success) {
         localStorage.setItem('token', res.data.data.token);
-        navigate(from, { replace: true });
+        if (remember) {
+          localStorage.setItem(REMEMBER_KEY, '1');
+          localStorage.setItem(USERNAME_KEY, username);
+          localStorage.setItem(PASSWORD_KEY, password);
+        } else {
+          localStorage.removeItem(REMEMBER_KEY);
+          localStorage.removeItem(USERNAME_KEY);
+          localStorage.removeItem(PASSWORD_KEY);
+        }
+        navigate(isMobileClient() ? '/mobile' : '/', { replace: true });
       }
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response?.status === 401) {
@@ -81,6 +112,16 @@ export default function Login() {
                 required
               />
             </div>
+
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500/50 focus:ring-offset-0"
+              />
+              <span className="text-sm text-slate-300">记住密码</span>
+            </label>
 
             {error && (
               <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2.5">
