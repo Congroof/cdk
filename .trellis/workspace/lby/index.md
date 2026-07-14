@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 1
-- **Last Active**: 2026-06-24
+- **Total Sessions**: 2
+- **Last Active**: 2026-07-14
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~43 | Active |
+| `journal-1.md` | ~78 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 2 | 2026-07-14 | Finish user feedback API + login remember | `1a27dcd`, `dea16dd`, `f070f28` | `main` |
 | 1 | 2026-06-24 | Spec 填充 + 前端统计优化重构 | `2f1f532`, `dc3ccfc`, `5572754`, `cbfefef` | `main` |
 <!-- @@@/auto:session-history -->
 

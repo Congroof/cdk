@@ -41,3 +41,38 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: Finish user feedback API + login remember
+
+**Date**: 2026-07-14
+**Task**: Finish user feedback API + login remember
+**Branch**: `main`
+
+### Summary
+
+质检通过并修齐反馈 toast/API.md metadata 描述；写入 feedback-api Trellis 契约与目录结构；另完成登录页记住密码与桌面/移动端自动跳转。归档 add-user-feedback-api。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1a27dcd` | (see git log) |
+| `dea16dd` | (see git log) |
+| `f070f28` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
