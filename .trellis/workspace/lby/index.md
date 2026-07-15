@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 3
-- **Last Active**: 2026-07-14
+- **Total Sessions**: 4
+- **Last Active**: 2026-07-16
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~112 | Active |
+| `journal-1.md` | ~146 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 4 | 2026-07-16 | 为 game hash 增加 gzip 静态压缩 | `255c6f3`, `9da5b21` | `main` |
 | 3 | 2026-07-14 | 支持反馈结果查询与后台回复 | `85ce77e`, `1c266ba` | `main` |
 | 2 | 2026-07-14 | Finish user feedback API + login remember | `1a27dcd`, `dea16dd`, `f070f28` | `main` |
 | 1 | 2026-06-24 | Spec 填充 + 前端统计优化重构 | `2f1f532`, `dc3ccfc`, `5572754`, `cbfefef` | `main` |
