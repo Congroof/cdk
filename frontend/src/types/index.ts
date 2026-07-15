@@ -108,3 +108,10 @@ export interface FeedbackListResponse {
   page: number;
   page_size: number;
 }
+
+export interface Announcement {
+  title: string;
+  content: string;
+  is_enabled: boolean;
+  updated_at: string;
+}

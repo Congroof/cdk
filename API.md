@@ -73,6 +73,9 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 16 | POST | `/api/client/feedback/query` | 否 | 按机器码查询匿名反馈及处理结果 |
 | 17 | POST | `/api/client/u/{username}/feedback/query` | 否 | 按机器码查询指定用户归属的反馈及处理结果 |
 | 18 | POST | `/api/feedback/reply` | 是 | 保存或修改反馈回复 |
+| 19 | GET | `/api/announcement` | 是 | 获取当前管理员公告草稿 |
+| 20 | POST | `/api/announcement` | 是 | 创建或修改当前管理员公告 |
+| 21 | GET | `/api/client/u/{username}/announcement` | 否 | 获取指定用户已启用的公告 |
 
 > `/api/client/*` 和 `/api/cdk/validate|activate` 使用相同的处理逻辑，区别仅在于是否需要 JWT 认证。
 
@@ -895,6 +898,125 @@ curl -X POST http://localhost/api/feedback/reply \
 
 ---
 
+## 15. 获取管理端公告
+
+### `GET /api/announcement`
+
+获取当前登录管理员自己的公告草稿，包括停用状态。该接口需要 JWT 认证。
+
+**请求头**：`Authorization: Bearer <token>`
+
+**调用示例**：
+
+```bash
+curl http://localhost/api/announcement \
+  -H "Authorization: Bearer eyJhbGci..."
+```
+
+**成功响应**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "title": "版本更新公告",
+    "content": "客户端将在今晚进行更新。\n更新期间服务可能短暂不可用。",
+    "is_enabled": true,
+    "updated_at": "2026-07-16T18:30:00"
+  }
+}
+```
+
+尚未创建公告时返回 HTTP 200，`data` 为 `null`。
+
+---
+
+## 16. 创建或修改管理端公告
+
+### `POST /api/announcement`
+
+保存当前登录管理员的公告。首次调用创建公告，后续调用更新同一条记录；每个管理员最多一条公告。该接口需要 JWT 认证。
+
+**请求头**：
+
+```text
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**请求参数**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| title | string | 是 | 纯文本标题，去除首尾空白后不能为空，最长 128 字符 |
+| content | string | 是 | 多行纯文本正文，去除首尾空白后不能为空，最长 10000 字符 |
+| is_enabled | boolean | 是 | 是否允许客户端读取 |
+
+**调用示例**：
+
+```bash
+curl -X POST http://localhost/api/announcement \
+  -H "Authorization: Bearer eyJhbGci..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "版本更新公告",
+    "content": "客户端将在今晚进行更新。",
+    "is_enabled": true
+  }'
+```
+
+成功响应的 `data` 与管理端获取接口一致。
+
+**错误响应**：
+
+```json
+{ "success": false, "error": "公告标题不能为空" }
+{ "success": false, "error": "公告标题过长" }
+{ "success": false, "error": "公告内容不能为空" }
+{ "success": false, "error": "公告内容过长" }
+```
+
+---
+
+## 17. 客户端获取公告
+
+### `GET /api/client/u/{username}/announcement`
+
+无需认证，获取指定后台用户当前已启用的公告。公开响应不会包含 `is_enabled` 或归属用户等管理字段。
+
+**调用示例**：
+
+```bash
+curl http://localhost/api/client/u/admin/announcement
+```
+
+**成功响应**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "title": "版本更新公告",
+    "content": "客户端将在今晚进行更新。",
+    "updated_at": "2026-07-16T18:30:00"
+  }
+}
+```
+
+管理员尚未创建公告或公告已停用时返回 HTTP 200：
+
+```json
+{ "success": true, "data": null }
+```
+
+用户名不存在时返回 HTTP 404：
+
+```json
+{ "success": false, "error": "用户不存在" }
+```
+
+---
+
 ## CDK 数据模型
 
 | 字段 | 类型 | 说明 |
@@ -931,6 +1053,20 @@ curl -X POST http://localhost/api/feedback/reply \
 | is_done | boolean | 是否已完成，默认 `false` |
 | done_at | string \| null | 标记完成时间；重新打开后为空 |
 | created_at | string | 创建时间 |
+
+## 公告数据模型
+
+表名：`announcements`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | number | 自增主键 |
+| title | string | 纯文本公告标题，最长 128 字符 |
+| content | string | 多行纯文本公告正文，最长 10000 字符 |
+| is_enabled | boolean | 是否允许客户端读取 |
+| created_by | number | 归属后台用户 ID，每个用户唯一 |
+| created_at | string | 创建时间 |
+| updated_at | string | 最近更新时间 |
 
 ## CDK 状态流转
 

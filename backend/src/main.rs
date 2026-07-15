@@ -36,6 +36,10 @@ async fn main() {
         .allow_headers(Any);
 
     let protected = Router::new()
+        .route(
+            "/announcement",
+            get(handlers::announcement::get).post(handlers::announcement::save),
+        )
         .route("/cdk/generate", post(handlers::cdk::generate))
         .route("/cdk/list", get(handlers::cdk::list))
         .route("/cdk/stats", get(handlers::cdk::stats))
@@ -67,6 +71,10 @@ async fn main() {
         );
 
     let user_client_routes = Router::new()
+        .route(
+            "/client/u/{username}/announcement",
+            get(handlers::announcement::get_for_client),
+        )
         .route(
             "/client/u/{username}/validate",
             post(handlers::cdk::user_validate),

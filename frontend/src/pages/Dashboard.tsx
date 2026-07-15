@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, RefreshCw, Search, Filter, Download, KeyRound, BarChart3, ShieldBan, MessageSquare } from 'lucide-react';
+import {
+  BarChart3,
+  Download,
+  Filter,
+  KeyRound,
+  Megaphone,
+  MessageSquare,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldBan,
+} from 'lucide-react';
 import Layout from '../components/Layout';
 import CDKTable from '../components/CDKTable';
 import CreateModal from '../components/CreateModal';
@@ -7,10 +18,11 @@ import ExportModal from '../components/ExportModal';
 import UsageStats from '../components/UsageStats';
 import BannedMachines from '../components/BannedMachines';
 import FeedbackList from '../components/FeedbackList';
+import AnnouncementEditor from '../components/AnnouncementEditor';
 import api from '../api';
 import type { Cdk } from '../types';
 
-type TabKey = 'cdk' | 'stats' | 'banned' | 'feedback';
+type TabKey = 'cdk' | 'stats' | 'banned' | 'feedback' | 'announcement';
 
 const statusFilters: { value: string; label: string }[] = [
   { value: '', label: '全部' },
@@ -56,7 +68,7 @@ export default function Dashboard() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, any> = { page, page_size: pageSize };
+      const params: Record<string, string | number> = { page, page_size: pageSize };
       if (status) params.status = status;
       if (search) params.search = search;
       const res = await api.get('/cdk/list', { params });
@@ -72,12 +84,12 @@ export default function Dashboard() {
   }, [page, pageSize, status, search]);
 
   const refreshAll = useCallback(() => {
-    fetchData();
-    fetchStats();
+    void fetchData();
+    void fetchStats();
   }, [fetchData, fetchStats]);
 
   useEffect(() => {
-    refreshAll();
+    void Promise.resolve().then(refreshAll);
   }, [refreshAll]);
 
   const handleSearch = (e: React.FormEvent) => {
@@ -95,7 +107,7 @@ export default function Dashboard() {
   return (
     <Layout>
       {/* Tab Switcher */}
-      <div className="flex items-center gap-1 mb-8 bg-white/[0.03] border border-white/5 rounded-xl p-1 w-fit">
+      <div className="flex flex-wrap items-center gap-1 mb-8 bg-white/[0.03] border border-white/5 rounded-xl p-1 w-full sm:w-fit">
         <button
           onClick={() => setActiveTab('cdk')}
           className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
@@ -139,6 +151,17 @@ export default function Dashboard() {
         >
           <MessageSquare className="w-4 h-4" />
           用户反馈
+        </button>
+        <button
+          onClick={() => setActiveTab('announcement')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+            activeTab === 'announcement'
+              ? 'bg-gradient-to-r from-violet-500/15 to-indigo-500/15 text-violet-400 shadow-sm'
+              : 'text-slate-400 hover:text-slate-300 hover:bg-white/5'
+          }`}
+        >
+          <Megaphone className="w-4 h-4" />
+          公告管理
         </button>
       </div>
 
@@ -249,8 +272,10 @@ export default function Dashboard() {
         <UsageStats />
       ) : activeTab === 'banned' ? (
         <BannedMachines />
-      ) : (
+      ) : activeTab === 'feedback' ? (
         <FeedbackList />
+      ) : (
+        <AnnouncementEditor />
       )}
     </Layout>
   );
