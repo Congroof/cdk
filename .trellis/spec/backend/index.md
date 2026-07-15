@@ -25,6 +25,7 @@ Before writing backend code, read these guideline files:
 5. [Quality Guidelines](./quality-guidelines.md) — code style, build commands, anti-patterns
 6. [Feedback API](./feedback-api.md) — when touching user feedback routes/schema
 7. [Hash Dictionary Sync](./hash-sync.md) — when changing SkinForge hash download, storage, compression, or Nginx delivery
+8. [Announcement API](./announcement-api.md) — when changing announcement storage, admin management, or public client delivery
 
 ---
 
@@ -39,6 +40,7 @@ Before writing backend code, read these guideline files:
 | [Quality Guidelines](./quality-guidelines.md) | Code style, linting, anti-patterns | Filled |
 | [Feedback API](./feedback-api.md) | Client/admin feedback contracts and visibility | Filled |
 | [Hash Dictionary Sync](./hash-sync.md) | Hash mirror, gzip artifact, and static delivery contracts | Filled |
+| [Announcement API](./announcement-api.md) | Tenant-owned announcement management and public read contracts | Filled |
 
 ---
 
