@@ -144,3 +144,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: 增加公告管理与公开获取
+
+**Date**: 2026-07-16
+**Task**: 增加公告管理与公开获取
+**Branch**: `main`
+
+### Summary
+
+新增每管理员一条公告的数据模型、JWT 管理端读取与 upsert 保存接口、按用户名免鉴权客户端读取接口，以及 Dashboard 公告编辑入口；同步数据库迁移、API 文档和租户隔离规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3ab02b7` | (see git log) |
+| `5c5043d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
