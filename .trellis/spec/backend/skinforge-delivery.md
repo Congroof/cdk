@@ -38,8 +38,9 @@ skinforge_hash_sync_status(id=1)
 - Release import uses schema 1, string file/group/parent IDs, SemVer, RFC3339
   date, signature, size, SHA-1/SHA-256, and non-empty notes.
 - Existing release versions may only be replaced by a strictly greater SemVer.
-- Stable file/link IDs are persisted; signed OSS URLs live only in a short
-  in-memory cache and refresh inside a five-minute expiry window.
+- Stable file/link IDs are persisted; signed OSS URLs are never cached or
+  persisted. Every updater or Hash metadata request resolves fresh URLs from
+  KDocs.
 - Dynamic Tauri response is top-level `version`, `url`, `signature`, `notes`,
   `pub_date`; it is not wrapped in the normal API envelope.
 - Nginx proxies `/api/` only and has no `/skinforge/` large-file location.
@@ -56,6 +57,7 @@ skinforge_hash_sync_status(id=1)
 | Unsupported updater target/arch, no release, or already current | HTTP 204 |
 | OSS URL resolve failure | HTTP 503; never proxy the large file |
 | Hash public request with either URL unavailable | HTTP 503 |
+| Hash DB row missing but complete pending upload exists | Resolve/probe both URLs, publish the pending pair, then return HTTP 200 |
 
 ### 5. Good / Base / Bad Cases
 
@@ -69,7 +71,8 @@ skinforge_hash_sync_status(id=1)
 ### 6. Tests Required
 
 - AES-GCM round-trip and wrong-key failure; csrf/hint parsing.
-- OSS `Expires` parsing and cache refresh boundary.
+- Every repeated updater/Hash request invokes KDocs URL resolution again.
+- Complete pending Hash uploads recover the DB singleton on a public request.
 - Manifest schema/platform/SemVer/digest validation.
 - Updater 204/200/400/503 integration matrix.
 - Frontend import/config/status build and lint.

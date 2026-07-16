@@ -99,7 +99,6 @@ pub async fn save_kdocs_settings(
     .bind(user_id)
     .execute(&state.db)
     .await?;
-    state.kdocs.clear_cache().await;
     get_kdocs_settings(State(state)).await
 }
 
@@ -186,7 +185,6 @@ pub async fn save_release(
     .execute(&mut *transaction)
     .await?;
     transaction.commit().await?;
-    state.kdocs.clear_cache().await;
     get_release(State(state)).await
 }
 
@@ -248,15 +246,17 @@ pub async fn trigger_hash_sync(
 pub async fn public_hash(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let row = sqlx::query_as::<_, HashReleaseRow>(
-        "SELECT version, etag, canonical_size, canonical_sha256, source,
-         txt_file_id, txt_link_id, txt_size, txt_sha256,
-         gzip_file_id, gzip_link_id, gzip_size, gzip_sha256, published_at
-         FROM skinforge_hash_releases WHERE id = 1",
-    )
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| AppError::NotFound("尚无可用的 Hash 发布".to_string()))?;
+    let mut row = fetch_hash_release(&state).await?;
+    if row.is_none()
+        && state
+            .hash_sync
+            .recover_pending_release()
+            .await
+            .map_err(AppError::ServiceUnavailable)?
+    {
+        row = fetch_hash_release(&state).await?;
+    }
+    let row = row.ok_or_else(|| AppError::NotFound("尚无可用的 Hash 发布".to_string()))?;
     let (identity_url, gzip_url) = tokio::try_join!(
         state
             .kdocs
@@ -287,6 +287,17 @@ pub async fn public_hash(
         },
     };
     Ok(Json(serde_json::json!({ "success": true, "data": data })))
+}
+
+async fn fetch_hash_release(state: &AppState) -> Result<Option<HashReleaseRow>, AppError> {
+    Ok(sqlx::query_as::<_, HashReleaseRow>(
+        "SELECT version, etag, canonical_size, canonical_sha256, source,
+         txt_file_id, txt_link_id, txt_size, txt_sha256,
+         gzip_file_id, gzip_link_id, gzip_size, gzip_sha256, published_at
+         FROM skinforge_hash_releases WHERE id = 1",
+    )
+    .fetch_optional(&state.db)
+    .await?)
 }
 
 async fn fetch_release(state: &AppState) -> Result<Option<SkinforgeRelease>, AppError> {

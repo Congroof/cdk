@@ -43,7 +43,11 @@ pending-upload JSON that can independently preserve completed TXT/gzip uploads.
 Both file/link ID pairs must resolve to OSS URLs and pass probes before one DB
 transaction replaces the public singleton. Nginx never exposes the mirror.
 Public metadata returns canonical fields plus explicit gzip/identity artifacts;
-both URLs must resolve or the request returns 503.
+both URLs are resolved fresh on every request or the request returns 503. If
+the public singleton is missing but staging metadata and a complete pending
+TXT/gzip pair exist, the public request resolves and probes both pending files,
+publishes the pair transactionally, removes pending, and returns the recovered
+release.
 
 ### 4. Validation & Error Matrix
 
@@ -54,6 +58,7 @@ both URLs must resolve or the request returns 503.
 | One upload fails | Persist completed peer in pending JSON; do not publish |
 | One URL resolve/probe fails | Preserve current DB release and pending data |
 | Both artifacts valid | Transactionally upsert current release, clear pending |
+| DB release missing, complete pending pair valid | Public request recovers and publishes the pair |
 | Current candidate already published and both URLs usable | Skip re-upload |
 | Service restart | `running=false`; DB status and staging/pending remain usable |
 

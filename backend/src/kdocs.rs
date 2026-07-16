@@ -1,6 +1,4 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::Duration;
 
 use aes_gcm::aead::{Aead, KeyInit, Payload};
@@ -8,14 +6,15 @@ use aes_gcm::{Aes256Gcm, Nonce};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use rand::RngCore;
-use reqwest::header::{HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, ETAG, RANGE};
+use reqwest::header::{
+    HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, ETAG, RANGE, USER_AGENT,
+};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::json;
 use sha1::{Digest as Sha1Digest, Sha1};
 use sha2::Sha256;
 use sqlx::{FromRow, MySqlPool};
-use tokio::sync::Mutex;
 use tokio_util::io::ReaderStream;
 
 use crate::models::skinforge::UploadedArtifact;
@@ -23,12 +22,13 @@ use crate::models::skinforge::UploadedArtifact;
 const API_BASE: &str = "https://365.kdocs.cn";
 const AAD: &[u8] = b"cdk-server:kdocs-settings:v1";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30 * 60);
-const CACHE_REFRESH_WINDOW_SECS: i64 = 5 * 60;
+const KDOCS_USER_AGENT: &str =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 \
+     (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
 
 #[derive(Clone)]
 pub struct KdocsService {
     key: [u8; 32],
-    cache: Arc<Mutex<HashMap<(u64, String), CachedUrl>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -36,12 +36,6 @@ pub struct KdocsSettings {
     pub cookie: String,
     pub group_id: u64,
     pub parent_id: u64,
-}
-
-#[derive(Debug, Clone)]
-struct CachedUrl {
-    url: String,
-    expires_at: Option<i64>,
 }
 
 #[derive(Debug, FromRow)]
@@ -87,18 +81,12 @@ impl KdocsService {
         let key: [u8; 32] = bytes
             .try_into()
             .map_err(|_| "KDOCS_CREDENTIAL_KEY 解码后必须正好为 32 字节".to_string())?;
-        Ok(Self {
-            key,
-            cache: Arc::new(Mutex::new(HashMap::new())),
-        })
+        Ok(Self { key })
     }
 
     #[cfg(test)]
     fn from_key(key: [u8; 32]) -> Self {
-        Self {
-            key,
-            cache: Arc::new(Mutex::new(HashMap::new())),
-        }
+        Self { key }
     }
 
     pub fn encrypt_cookie(&self, cookie: &str) -> Result<(String, String), String> {
@@ -175,10 +163,7 @@ impl KdocsService {
             .await
             .map_err(|error| format!("验证云文档配置失败: {error}"))?;
         if !response.status().is_success() {
-            return Err(format!(
-                "云文档凭证或目录不可用: HTTP {}",
-                response.status()
-            ));
+            return Err(response_error(response, "云文档凭证或目录不可用").await);
         }
         Ok(())
     }
@@ -229,11 +214,6 @@ impl KdocsService {
         file_id: u64,
         link_id: &str,
     ) -> Result<String, String> {
-        let key = (file_id, link_id.to_string());
-        if let Some(cached) = self.cached_url(&key).await {
-            return Ok(cached);
-        }
-
         let settings = self.load_settings(pool).await?;
         let client = build_api_client(&settings.cookie)?;
         let response = client
@@ -251,14 +231,6 @@ impl KdocsService {
             .download_url
             .or(body.url)
             .ok_or_else(|| "云文档响应中没有下载地址".to_string())?;
-        let expires_at = parse_expires(&url);
-        self.cache.lock().await.insert(
-            key,
-            CachedUrl {
-                url: url.clone(),
-                expires_at,
-            },
-        );
         Ok(url)
     }
 
@@ -283,20 +255,6 @@ impl KdocsService {
             Ok(())
         } else {
             Err(format!("OSS 下载地址不可用: HTTP {}", range.status()))
-        }
-    }
-
-    pub async fn clear_cache(&self) {
-        self.cache.lock().await.clear();
-    }
-
-    async fn cached_url(&self, key: &(u64, String)) -> Option<String> {
-        let now = chrono::Utc::now().timestamp();
-        let cache = self.cache.lock().await;
-        let cached = cache.get(key)?;
-        match cached.expires_at {
-            Some(expires_at) if now + CACHE_REFRESH_WINDOW_SECS >= expires_at => None,
-            _ => Some(cached.url.clone()),
         }
     }
 }
@@ -339,6 +297,7 @@ fn build_api_client(cookie: &str) -> Result<reqwest::Client, String> {
         HeaderValue::from_str(cookie).map_err(|_| "云文档 Cookie 格式无效".to_string())?;
     cookie_header.set_sensitive(true);
     headers.insert(COOKIE, cookie_header);
+    headers.insert(USER_AGENT, HeaderValue::from_static(KDOCS_USER_AGENT));
     reqwest::Client::builder()
         .timeout(REQUEST_TIMEOUT)
         .default_headers(headers)
@@ -467,12 +426,47 @@ async fn parse_json_response<T: DeserializeOwned>(
     operation: &str,
 ) -> Result<T, String> {
     if !response.status().is_success() {
-        return Err(format!("{operation}失败: HTTP {}", response.status()));
+        return Err(response_error(response, operation).await);
     }
     response
         .json::<T>()
         .await
         .map_err(|error| format!("{operation}响应格式不正确: {error}"))
+}
+
+async fn response_error(response: reqwest::Response, operation: &str) -> String {
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    let detail = safe_error_detail(&body);
+    if detail.is_empty() {
+        format!("{operation}失败: HTTP {status}")
+    } else {
+        format!("{operation}失败: HTTP {status}; {detail}")
+    }
+}
+
+fn safe_error_detail(body: &str) -> String {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else {
+        return String::new();
+    };
+    let mut fields = Vec::new();
+    for name in ["result", "msg", "reason", "errno"] {
+        let Some(value) = value.get(name) else {
+            continue;
+        };
+        let text = match value {
+            serde_json::Value::String(value) => value.clone(),
+            serde_json::Value::Number(value) => value.to_string(),
+            _ => continue,
+        };
+        if !text.trim().is_empty() {
+            fields.push(format!(
+                "{name}={}",
+                text.chars().take(200).collect::<String>()
+            ));
+        }
+    }
+    fields.join(", ")
 }
 
 fn digest_file(path: &Path) -> Result<FileDigest, String> {
@@ -500,14 +494,6 @@ fn digest_file(path: &Path) -> Result<FileDigest, String> {
         sha1: format_hex(&sha1.finalize()),
         sha256: format_hex(&sha256.finalize()),
     })
-}
-
-fn parse_expires(url: &str) -> Option<i64> {
-    reqwest::Url::parse(url)
-        .ok()?
-        .query_pairs()
-        .find_map(|(name, value)| (name == "Expires").then(|| value.parse::<i64>().ok()))
-        .flatten()
 }
 
 fn content_type_for(file_name: &str) -> &'static str {
@@ -565,11 +551,13 @@ mod tests {
     }
 
     #[test]
-    fn parses_oss_expiry() {
+    fn extracts_safe_kdocs_error_fields() {
         assert_eq!(
-            parse_expires("https://example.com/file?Expires=1784203564&Signature=x"),
-            Some(1784203564)
+            safe_error_detail(
+                r#"{"result":"userNotLogin","msg":"用户未登录","errno":10000,"url":"secret"}"#
+            ),
+            "result=userNotLogin, msg=用户未登录, errno=10000"
         );
-        assert_eq!(parse_expires("https://example.com/file"), None);
+        assert_eq!(safe_error_detail("<html>forbidden</html>"), "");
     }
 }

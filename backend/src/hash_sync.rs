@@ -18,7 +18,7 @@ use crate::config::HashSyncConfig;
 use crate::kdocs::KdocsService;
 use crate::models::skinforge::{
     HashManagementStatus, HashPendingSummary, HashReleaseRow, HashReleaseSummary,
-    HashSyncStatusRow, PendingHashUploads,
+    HashSyncStatusRow, PendingHashUploads, UploadedArtifact,
 };
 
 const HASH_FILE_NAME: &str = "hashes.game.txt";
@@ -163,6 +163,56 @@ impl HashSyncController {
         })
     }
 
+    pub async fn recover_pending_release(&self) -> Result<bool, String> {
+        if self
+            .running
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return Err("Hash 同步正在运行，请稍后重试".to_string());
+        }
+
+        let result = self.recover_pending_release_inner().await;
+        match &result {
+            Ok(Some(version)) => {
+                if let Err(error) = self.record_success(version).await {
+                    tracing::error!("Record recovered SkinForge hash release failed: {}", error);
+                }
+                tracing::info!("Recovered pending SkinForge hash release: {}", version);
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::error!("Recover pending SkinForge hash release failed: {}", error);
+                if let Err(record_error) = self.record_failure(error).await {
+                    tracing::error!(
+                        "Record recovered SkinForge hash failure failed: {}",
+                        record_error
+                    );
+                }
+            }
+        }
+        self.running.store(false, Ordering::Release);
+        result.map(|version| version.is_some())
+    }
+
+    async fn recover_pending_release_inner(&self) -> Result<Option<String>, String> {
+        let meta_path = self.config.mirror_dir.join(META_FILE_NAME);
+        let pending_path = self.config.mirror_dir.join(PENDING_FILE_NAME);
+        let Some(candidate) = read_json::<CandidateMeta>(&meta_path) else {
+            return Ok(None);
+        };
+        let Some(pending) = read_json::<PendingHashUploads>(&pending_path) else {
+            return Ok(None);
+        };
+        if pending.txt.is_none() || pending.gzip.is_none() {
+            return Ok(None);
+        }
+
+        self.publish_pending_release(&candidate, &pending, &pending_path)
+            .await?;
+        Ok(Some(candidate.version))
+    }
+
     async fn sync_once(&self) -> Result<String, String> {
         fs::create_dir_all(&self.config.mirror_dir)
             .map_err(|error| format!("创建 Hash staging 目录失败: {error}"))?;
@@ -232,14 +282,18 @@ impl HashSyncController {
             write_json_atomic(&pending_path, &pending)?;
         }
 
-        let txt = pending
-            .txt
-            .as_ref()
-            .ok_or_else(|| "缺少 TXT 上传记录".to_string())?;
-        let gzip = pending
-            .gzip
-            .as_ref()
-            .ok_or_else(|| "缺少 gzip 上传记录".to_string())?;
+        self.publish_pending_release(&candidate, &pending, &pending_path)
+            .await?;
+        Ok(candidate.version)
+    }
+
+    async fn publish_pending_release(
+        &self,
+        candidate: &CandidateMeta,
+        pending: &PendingHashUploads,
+        pending_path: &Path,
+    ) -> Result<(), String> {
+        let (txt, gzip) = validate_pending_release(candidate, pending)?;
         let (txt_url, gzip_url) = tokio::try_join!(
             self.kdocs
                 .resolve_download_url(&self.pool, txt.file_id, &txt.link_id),
@@ -297,8 +351,7 @@ impl HashSyncController {
             .map_err(|error| format!("提交 Hash 发布事务失败: {error}"))?;
 
         let _ = fs::remove_file(pending_path);
-        self.kdocs.clear_cache().await;
-        Ok(candidate.version)
+        Ok(())
     }
 
     async fn current_release_is_usable(
@@ -393,6 +446,45 @@ impl HashSyncController {
         .map_err(|db_error| format!("更新 Hash 同步失败状态失败: {db_error}"))?;
         Ok(())
     }
+}
+
+fn validate_pending_release<'a>(
+    candidate: &CandidateMeta,
+    pending: &'a PendingHashUploads,
+) -> Result<(&'a UploadedArtifact, &'a UploadedArtifact), String> {
+    if pending.version != candidate.version
+        || !pending
+            .canonical_sha256
+            .eq_ignore_ascii_case(&candidate.sha256)
+    {
+        return Err("待发布 Hash 记录与候选版本不一致".to_string());
+    }
+
+    let txt = pending
+        .txt
+        .as_ref()
+        .ok_or_else(|| "缺少 TXT 上传记录".to_string())?;
+    let gzip = pending
+        .gzip
+        .as_ref()
+        .ok_or_else(|| "缺少 gzip 上传记录".to_string())?;
+
+    if txt.file_id == 0
+        || txt.link_id.trim().is_empty()
+        || txt.file_name != HASH_FILE_NAME
+        || txt.file_size != candidate.size
+        || !txt.sha256.eq_ignore_ascii_case(&candidate.sha256)
+    {
+        return Err("待发布 TXT 上传记录与候选文件不一致".to_string());
+    }
+    if gzip.file_id == 0
+        || gzip.link_id.trim().is_empty()
+        || gzip.file_name != GZIP_FILE_NAME
+        || gzip.file_size == 0
+    {
+        return Err("待发布 gzip 上传记录无效".to_string());
+    }
+    Ok((txt, gzip))
 }
 
 fn build_hash_client() -> Result<reqwest::Client, String> {
@@ -739,5 +831,47 @@ mod tests {
         assert_eq!(decoded.version, "v1");
         assert_eq!(decoded.canonical_sha256, "a".repeat(64));
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn validates_complete_pending_release_against_candidate() {
+        let candidate = CandidateMeta {
+            version: "v1".to_string(),
+            etag: Some("\"etag\"".to_string()),
+            size: 100,
+            sha256: "a".repeat(64),
+            source: "https://example.com/hashes.game.txt".to_string(),
+            updated_at: "2026-07-16T18:00:00Z".to_string(),
+        };
+        let pending = PendingHashUploads {
+            version: candidate.version.clone(),
+            canonical_sha256: candidate.sha256.clone(),
+            txt: Some(UploadedArtifact {
+                file_id: 1,
+                link_id: "txt-link".to_string(),
+                link_url: None,
+                file_name: HASH_FILE_NAME.to_string(),
+                file_size: candidate.size,
+                sha1: "b".repeat(40),
+                sha256: candidate.sha256.clone(),
+            }),
+            gzip: Some(UploadedArtifact {
+                file_id: 2,
+                link_id: "gzip-link".to_string(),
+                link_url: None,
+                file_name: GZIP_FILE_NAME.to_string(),
+                file_size: 50,
+                sha1: "c".repeat(40),
+                sha256: "d".repeat(64),
+            }),
+        };
+
+        let (txt, gzip) = validate_pending_release(&candidate, &pending).unwrap();
+        assert_eq!(txt.file_id, 1);
+        assert_eq!(gzip.file_id, 2);
+
+        let mut invalid = pending.clone();
+        invalid.txt.as_mut().unwrap().file_size += 1;
+        assert!(validate_pending_release(&candidate, &invalid).is_err());
     }
 }
