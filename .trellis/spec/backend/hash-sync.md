@@ -44,6 +44,9 @@ Both file/link ID pairs must resolve to OSS URLs and pass probes before one DB
 transaction replaces the public singleton. Nginx never exposes the mirror.
 Public metadata returns canonical fields plus explicit gzip/identity artifacts;
 both URLs are resolved fresh on every request or the request returns 503. If
+KDocs rejects direct-external mode as unsupported for a file type, retry the
+same file once using its ordinary download mode. Current KDocs behavior requires
+ordinary mode for TXT and direct-external mode for gzip. If
 the public singleton is missing but staging metadata and a complete pending
 TXT/gzip pair exist, the public request resolves and probes both pending files,
 publishes the pair transactionally, removes pending, and returns the recovered
@@ -57,6 +60,7 @@ release.
 | Upstream download below 50 MiB, wrong length, invalid first line | Preserve current DB release |
 | One upload fails | Persist completed peer in pending JSON; do not publish |
 | One URL resolve/probe fails | Preserve current DB release and pending data |
+| Direct-external URL mode reports unsupported | Retry that file once without the direct-external parameter |
 | Both artifacts valid | Transactionally upsert current release, clear pending |
 | DB release missing, complete pending pair valid | Public request recovers and publishes the pair |
 | Current candidate already published and both URLs usable | Skip re-upload |

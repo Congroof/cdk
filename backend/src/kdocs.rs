@@ -67,6 +67,12 @@ struct DownloadResponse {
 }
 
 #[derive(Debug)]
+struct DownloadRequestError {
+    message: String,
+    unsupported_mode: bool,
+}
+
+#[derive(Debug)]
 struct FileDigest {
     size: u64,
     sha1: String,
@@ -216,17 +222,15 @@ impl KdocsService {
     ) -> Result<String, String> {
         let settings = self.load_settings(pool).await?;
         let client = build_api_client(&settings.cookie)?;
-        let response = client
-            .get(format!("{API_BASE}/api/v3/office/file/{file_id}/download"))
-            .query(&[
-                ("support_checksums", "md5,sha1,sha224,sha256,sha384,sha512"),
-                ("get_direct_external_download_url", "true"),
-                ("cid", link_id),
-            ])
-            .send()
-            .await
-            .map_err(|error| format!("获取 OSS 下载地址失败: {error}"))?;
-        let body: DownloadResponse = parse_json_response(response, "获取 OSS 下载地址").await?;
+        let body = match request_download_url(&client, file_id, link_id, true).await {
+            Ok(body) => body,
+            Err(error) if error.unsupported_mode => {
+                request_download_url(&client, file_id, link_id, false)
+                    .await
+                    .map_err(|error| error.message)?
+            }
+            Err(error) => return Err(error.message),
+        };
         let url = body
             .download_url
             .or(body.url)
@@ -310,6 +314,43 @@ fn build_upload_client() -> Result<reqwest::Client, String> {
         .timeout(REQUEST_TIMEOUT)
         .build()
         .map_err(|error| format!("创建对象存储 HTTP 客户端失败: {error}"))
+}
+
+async fn request_download_url(
+    client: &reqwest::Client,
+    file_id: u64,
+    link_id: &str,
+    direct_external: bool,
+) -> Result<DownloadResponse, DownloadRequestError> {
+    let mut query = vec![("support_checksums", "md5,sha1,sha224,sha256,sha384,sha512")];
+    if direct_external {
+        query.push(("get_direct_external_download_url", "true"));
+    }
+    query.push(("cid", link_id));
+    let response = client
+        .get(format!("{API_BASE}/api/v3/office/file/{file_id}/download"))
+        .query(&query)
+        .send()
+        .await
+        .map_err(|error| DownloadRequestError {
+            message: format!("获取 OSS 下载地址失败: {error}"),
+            unsupported_mode: false,
+        })?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(DownloadRequestError {
+            message: format_response_error(status, &body, "获取 OSS 下载地址"),
+            unsupported_mode: unsupported_download_mode(&body),
+        });
+    }
+    response
+        .json::<DownloadResponse>()
+        .await
+        .map_err(|error| DownloadRequestError {
+            message: format!("获取 OSS 下载地址响应格式不正确: {error}"),
+            unsupported_mode: false,
+        })
 }
 
 async fn create_upload(
@@ -437,12 +478,26 @@ async fn parse_json_response<T: DeserializeOwned>(
 async fn response_error(response: reqwest::Response, operation: &str) -> String {
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
-    let detail = safe_error_detail(&body);
+    format_response_error(status, &body, operation)
+}
+
+fn format_response_error(status: reqwest::StatusCode, body: &str, operation: &str) -> String {
+    let detail = safe_error_detail(body);
     if detail.is_empty() {
         format!("{operation}失败: HTTP {status}")
     } else {
         format!("{operation}失败: HTTP {status}; {detail}")
     }
+}
+
+fn unsupported_download_mode(body: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else {
+        return false;
+    };
+    let Some(result) = value.get("result").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    result.eq_ignore_ascii_case("UnSupportFileType") || result.eq_ignore_ascii_case("unSupport")
 }
 
 fn safe_error_detail(body: &str) -> String {
@@ -559,5 +614,18 @@ mod tests {
             "result=userNotLogin, msg=用户未登录, errno=10000"
         );
         assert_eq!(safe_error_detail("<html>forbidden</html>"), "");
+    }
+
+    #[test]
+    fn detects_download_mode_errors_for_txt_and_gzip() {
+        assert!(unsupported_download_mode(
+            r#"{"result":"UnSupportFileType","errno":10000}"#
+        ));
+        assert!(unsupported_download_mode(
+            r#"{"result":"unSupport","errno":10000}"#
+        ));
+        assert!(!unsupported_download_mode(
+            r#"{"result":"userNotLogin","errno":10000}"#
+        ));
     }
 }

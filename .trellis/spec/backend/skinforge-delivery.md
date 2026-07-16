@@ -72,6 +72,9 @@ skinforge_hash_sync_status(id=1)
 
 - AES-GCM round-trip and wrong-key failure; csrf/hint parsing.
 - Every repeated updater/Hash request invokes KDocs URL resolution again.
+- KDocs download resolution retries without `get_direct_external_download_url`
+  only when direct mode returns `UnSupportFileType` or `unSupport`;
+  authentication and other failures must not be hidden by the retry.
 - Complete pending Hash uploads recover the DB singleton on a public request.
 - Manifest schema/platform/SemVer/digest validation.
 - Updater 204/200/400/503 integration matrix.

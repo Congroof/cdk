@@ -1118,6 +1118,9 @@ curl http://localhost/api/client/u/admin/announcement
 换链并探测成功后才会成对更新数据库。公开 Hash 请求每次都会向云文档换取新的
 临时 OSS 地址，不缓存签名 URL；如果数据库尚无公开版本、但 staging 中存在 TXT
 和 gzip 都已上传完成的 pending 记录，公开请求会先尝试换链、探测并补完成发布事务。
+云文档对不同文件类型的换链模式并不一致：服务端先请求外链模式，仅当返回
+`UnSupportFileType` 或 `unSupport` 时，才自动去掉
+`get_direct_external_download_url` 重试一次。
 
 ---
 
