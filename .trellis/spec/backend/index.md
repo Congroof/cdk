@@ -24,8 +24,9 @@ Before writing backend code, read these guideline files:
 4. [Logging Guidelines](./logging-guidelines.md) — what/when/how to log
 5. [Quality Guidelines](./quality-guidelines.md) — code style, build commands, anti-patterns
 6. [Feedback API](./feedback-api.md) — when touching user feedback routes/schema
-7. [Hash Dictionary Sync](./hash-sync.md) — when changing SkinForge hash download, storage, compression, or Nginx delivery
+7. [Hash Dictionary Sync](./hash-sync.md) — when changing SkinForge Hash staging, paired OSS upload, or public metadata
 8. [Announcement API](./announcement-api.md) — when changing announcement storage, admin management, or public client delivery
+9. [SkinForge Delivery API](./skinforge-delivery.md) — when changing KDocs credentials, software publishing, updater responses, or OSS URL resolution
 
 ---
 
@@ -39,8 +40,9 @@ Before writing backend code, read these guideline files:
 | [Logging Guidelines](./logging-guidelines.md) | tracing usage, log levels | Filled |
 | [Quality Guidelines](./quality-guidelines.md) | Code style, linting, anti-patterns | Filled |
 | [Feedback API](./feedback-api.md) | Client/admin feedback contracts and visibility | Filled |
-| [Hash Dictionary Sync](./hash-sync.md) | Hash mirror, gzip artifact, and static delivery contracts | Filled |
+| [Hash Dictionary Sync](./hash-sync.md) | Private staging, paired TXT/gzip OSS publication, and public metadata | Filled |
 | [Announcement API](./announcement-api.md) | Tenant-owned announcement management and public read contracts | Filled |
+| [SkinForge Delivery API](./skinforge-delivery.md) | Encrypted KDocs settings and global dynamic delivery APIs | Filled |
 
 ---
 

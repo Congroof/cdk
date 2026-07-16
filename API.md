@@ -76,6 +76,12 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 19 | GET | `/api/announcement` | 是 | 获取当前管理员公告草稿 |
 | 20 | POST | `/api/announcement` | 是 | 创建或修改当前管理员公告 |
 | 21 | GET | `/api/client/u/{username}/announcement` | 否 | 获取指定用户已启用的公告 |
+| 22 | GET/POST | `/api/skinforge/kdocs-settings` | 是 | 查询或更新云文档配置 |
+| 23 | GET/POST | `/api/skinforge/release` | 是 | 查询或发布当前 SkinForge 版本 |
+| 24 | GET | `/api/skinforge/hash-status` | 是 | 查询 Hash 同步及当前发布状态 |
+| 25 | POST | `/api/skinforge/hash-sync` | 是 | 手动触发 Hash 同步 |
+| 26 | GET | `/api/client/skinforge/update/{target}/{arch}/{current_version}` | 否 | Tauri 动态更新 |
+| 27 | GET | `/api/client/skinforge/hash` | 否 | 获取 Hash OSS 下载元数据 |
 
 > `/api/client/*` 和 `/api/cdk/validate|activate` 使用相同的处理逻辑，区别仅在于是否需要 JWT 认证。
 
@@ -1017,6 +1023,102 @@ curl http://localhost/api/client/u/admin/announcement
 
 ---
 
+## SkinForge OSS 更新接口
+
+### 云文档配置
+
+`GET /api/skinforge/kdocs-settings` 只返回配置状态、Cookie 脱敏摘要、目录和修改信息。
+`POST /api/skinforge/kdocs-settings` 接收 camelCase JSON：
+
+```json
+{
+  "cookie": "完整 Cookie",
+  "groupId": "2144952871",
+  "parentId": "541664465686"
+}
+```
+
+服务端在线验证后使用 AES-256-GCM 加密 Cookie。明文、密文和 nonce 均不会由查询接口
+返回。
+
+### 发布软件版本
+
+`POST /api/skinforge/release` 接收 `release:upload` 生成的 manifest 和人工填写的
+更新说明：
+
+```json
+{
+  "manifest": {
+    "schemaVersion": 1,
+    "product": "skinforge",
+    "platform": "windows-x86_64",
+    "version": "1.2.0",
+    "pubDate": "2026-07-16T10:00:00Z",
+    "signature": "<tauri signature>",
+    "artifact": {
+      "fileId": "123",
+      "linkId": "abc",
+      "linkUrl": null,
+      "fileName": "SkinForge_1.2.0_x64-setup.exe",
+      "fileSize": 123456789,
+      "sha1": "<40 hex>",
+      "sha256": "<64 hex>",
+      "groupId": "2144952871",
+      "parentId": "541664465686"
+    }
+  },
+  "notes": "更新说明"
+}
+```
+
+仅支持 Windows x86_64，且 SemVer 必须严格递增。发布前服务端会动态换取 OSS 地址并
+探测文件可用性。
+
+### Tauri 动态更新
+
+`GET /api/client/skinforge/update/{target}/{arch}/{current_version}` 无需认证。
+仅 `windows/x86_64` 有效；无更新或平台不支持返回 HTTP 204。有更新时返回 Tauri
+要求的顶层 JSON：
+
+```json
+{
+  "version": "1.2.0",
+  "notes": "更新说明",
+  "pub_date": "2026-07-16T10:00:00Z",
+  "signature": "<tauri signature>",
+  "url": "https://...oss.../installer.exe"
+}
+```
+
+### Hash 元数据与同步
+
+`GET /api/client/skinforge/hash` 无需认证，返回同一版本的 gzip 和 identity OSS
+地址；任一地址不可生成时返回 HTTP 503：
+
+```json
+{
+  "success": true,
+  "data": {
+    "version": "upstream-version",
+    "etag": "\"...\"",
+    "size": 123456789,
+    "sha256": "<canonical sha256>",
+    "source": "https://raw.communitydragon.org/data/hashes/lol/hashes.game.txt",
+    "updatedAt": "2026-07-16T10:00:00",
+    "artifacts": {
+      "gzip": { "url": "https://...oss...", "size": 123, "sha256": "..." },
+      "identity": { "url": "https://...oss...", "size": 456, "sha256": "..." }
+    }
+  }
+}
+```
+
+受保护的 `GET /api/skinforge/hash-status` 查询持久化状态；
+`POST /api/skinforge/hash-sync` 快速启动后台任务。同步互斥，TXT 和 gzip 全部上传、
+换链并探测成功后才会成对更新数据库。
+
+---
+
 ## CDK 数据模型
 
 | 字段 | 类型 | 说明 |
@@ -1085,3 +1187,8 @@ unused ──激活──► activated ──到期──► expired
 | DATABASE_URL | 是 | - | MySQL 连接地址，格式 `mysql://user:pass@host:port/db` |
 | JWT_SECRET | 是 | - | JWT 签名密钥 |
 | SERVER_ADDR | 否 | `0.0.0.0:3000` | 服务监听地址 |
+| KDOCS_CREDENTIAL_KEY | 是 | - | Base64 编码的 32 字节 AES-256-GCM 主密钥；部署后不可更换 |
+| SKINFORGE_HASH_SYNC_ENABLED | 否 | `true` | 启用启动和周期 Hash 同步 |
+| SKINFORGE_HASH_SOURCE_URL | 否 | CommunityDragon 默认地址 | Hash 源地址 |
+| SKINFORGE_HASH_MIRROR_DIR | 否 | `/opt/skinforge-updates/hashes` | 私有 staging 与重试目录 |
+| SKINFORGE_HASH_SYNC_INTERVAL_HOURS | 否 | `24` | 周期同步间隔小时数 |

@@ -1,112 +1,95 @@
 # Hash Dictionary Sync
 
-> Executable contract for mirroring and serving the SkinForge `hashes.game.txt` dictionary.
+> Executable contract for staging and atomically publishing SkinForge Hash artifacts through cloud-document OSS.
 
-## Scenario: Mirror and precompress the game hash dictionary
+## Scenario: Paired TXT/gzip OSS publication
 
 ### 1. Scope / Trigger
 
-Read this spec when changing `backend/src/hash_sync.rs`, the `SKINFORGE_HASH_*` environment variables, the `/skinforge/` Nginx location, or the hash mirror volume.
-
-The service must reduce transfer size for gzip-capable clients without changing the URL or breaking clients that only accept the original text file.
+Read this spec when changing `backend/src/hash_sync.rs`, KDocs upload helpers,
+`SKINFORGE_HASH_*`, Hash tables/APIs, or the private mirror volume.
 
 ### 2. Signatures
 
-Backend lifecycle entry point:
-
 ```rust
-pub fn spawn_hash_sync(config: HashSyncConfig)
+HashSyncController::new(config, pool, kdocs) -> Arc<HashSyncController>
+HashSyncController::spawn_schedule(self: &Arc<Self>)
+HashSyncController::trigger(self: &Arc<Self>) -> bool
+HashSyncController::management_status(&self) -> Result<HashManagementStatus, String>
 ```
-
-Local artifact builder:
-
-```rust
-async fn ensure_gzip_file(hash_path: &Path, gzip_path: &Path) -> Result<bool, String>
-```
-
-Public HTTP resource:
 
 ```text
-GET /skinforge/hashes/hashes.game.txt
+GET  /api/skinforge/hash-status        JWT
+POST /api/skinforge/hash-sync          JWT
+GET  /api/client/skinforge/hash        public
 ```
+
+Database singletons: `skinforge_hash_releases(id=1)` and
+`skinforge_hash_sync_status(id=1)`.
 
 ### 3. Contracts
 
-Environment variables:
-
-| Key | Default | Contract |
+| Environment | Default | Contract |
 |---|---|---|
-| `SKINFORGE_HASH_SYNC_ENABLED` | `true` | Enables startup and periodic synchronization |
-| `SKINFORGE_HASH_SOURCE_URL` | CommunityDragon `hashes.game.txt` | Upstream identity-encoded TXT source |
-| `SKINFORGE_HASH_MIRROR_DIR` | `/opt/skinforge-updates/hashes` | Directory containing all hash artifacts |
-| `SKINFORGE_HASH_PUBLIC_BASE_URL` | Server `/skinforge/hashes` URL | Written to existing metadata without gzip-specific fields |
-| `SKINFORGE_HASH_SYNC_INTERVAL_HOURS` | `24` | Positive synchronization interval |
+| `SKINFORGE_HASH_SYNC_ENABLED` | `true` | Enables startup and interval triggers |
+| `SKINFORGE_HASH_SOURCE_URL` | CommunityDragon TXT | Fixed upstream |
+| `SKINFORGE_HASH_MIRROR_DIR` | `/opt/skinforge-updates/hashes` | Private staging/pending directory |
+| `SKINFORGE_HASH_SYNC_INTERVAL_HOURS` | `24` | Positive interval |
 
-Files in the mirror directory:
+The controller is process-mutual-exclusive across startup, interval, and manual
+triggers. Staging holds canonical TXT, gzip, candidate metadata, and an atomic
+pending-upload JSON that can independently preserve completed TXT/gzip uploads.
 
-| File | Purpose |
-|---|---|
-| `hashes.game.txt` | Canonical, uncompressed dictionary and legacy-client fallback |
-| `hashes.game.txt.gz` | Precompressed representation of the same bytes |
-| `hashes.game.meta.json` | Existing source/version/size/SHA-256 metadata; gzip fields are not required |
-| `*.download` / `*.compressing` | Incomplete private artifacts; never served as final files |
-
-Nginx uses `gzip_static on`, not `gzip_static always`. The public URL remains unchanged. A request advertising `Accept-Encoding: gzip` may receive the `.gz` representation with `Content-Encoding: gzip`; a request without gzip capability receives the canonical TXT. Responses vary on `Accept-Encoding`.
+Both file/link ID pairs must resolve to OSS URLs and pass probes before one DB
+transaction replaces the public singleton. Nginx never exposes the mirror.
+Public metadata returns canonical fields plus explicit gzip/identity artifacts;
+both URLs must resolve or the request returns 503.
 
 ### 4. Validation & Error Matrix
 
 | Condition | Required behavior |
 |---|---|
-| Download smaller than 50 MiB | Delete the temporary download and preserve the previous TXT |
-| Download size differs from `Content-Length` | Delete the temporary download and preserve the previous TXT |
-| First line is not `16 hex chars + space + path` | Reject the download and preserve the previous TXT |
-| Existing gzip is missing, empty, or older than TXT | Rebuild it from the local TXT without redownloading the dictionary |
-| Existing gzip is older than TXT | Remove it from the served path before compression so Nginx cannot return stale content |
-| gzip compression fails | Remove the temporary gzip; keep the canonical TXT available |
-| Final-file rename fails | Restore the previous final file when it is still valid |
-| Client does not advertise gzip | Serve uncompressed TXT from the same URL |
+| Concurrent trigger | Return false / HTTP 409; do not queue |
+| Upstream download below 50 MiB, wrong length, invalid first line | Preserve current DB release |
+| One upload fails | Persist completed peer in pending JSON; do not publish |
+| One URL resolve/probe fails | Preserve current DB release and pending data |
+| Both artifacts valid | Transactionally upsert current release, clear pending |
+| Current candidate already published and both URLs usable | Skip re-upload |
+| Service restart | `running=false`; DB status and staging/pending remain usable |
+
+Old cloud files are not deleted automatically.
 
 ### 5. Good / Base / Bad Cases
 
-- Good: a previous deployment already has a current TXT but no gzip; startup creates `.gz` locally and does not issue another GET for the dictionary.
-- Base: TXT and gzip are both current; synchronization performs the remote freshness check and skips recompression.
-- Bad: a new TXT replaces the old one while the old gzip remains visible; gzip-capable clients can receive bytes for the wrong dictionary version.
-- Bad: `gzip_static always` sends compressed bytes to a legacy client that did not advertise gzip support.
+- Good: TXT upload succeeds, gzip fails, next run uploads only gzip and publishes.
+- Base: current candidate and both OSS URLs are usable; sync records success.
+- Bad: publish TXT fields before gzip upload/probe succeeds.
+- Bad: serve staging directly from `/skinforge/` or erase pending files on error.
 
 ### 6. Tests Required
 
-- Unit test gzip creation from an existing TXT and assert `ensure_gzip_file` returns `true`.
-- Run it again without changing TXT and assert it returns `false`.
-- Decode the `.gz` and assert byte-for-byte equality with the canonical TXT.
-- Run `cargo check`, `cargo test`, `cargo fmt --check`, and `cargo clippy` for backend changes.
-- Validate both Nginx request modes in deployment testing:
-  - with `Accept-Encoding: gzip`, assert `Content-Encoding: gzip`;
-  - without it, assert no gzip content encoding and unchanged TXT content.
+- Gzip round-trip matches canonical bytes.
+- Pending upload JSON round-trips partial state.
+- Verify controller rejects concurrent trigger in integration/manual testing.
+- Assert a failed artifact/probe does not update `skinforge_hash_releases`.
+- Run `cargo fmt --check`, `cargo test`, `cargo check`, frontend build, and
+  `docker compose config`.
+- Manual real-Cookie sync must confirm both public URLs download from HTTPS OSS.
 
 ### 7. Wrong vs Correct
 
 #### Wrong
 
-```nginx
-gzip_static always;
-```
-
 ```rust
-// Replacing TXT while leaving the previous .gz publicly visible creates a stale window.
-replace_file(new_txt, final_txt)?;
-compress_hash_file(final_txt, gzip_path)?;
+publish_txt_to_database(txt)?;
+upload_gzip(gzip)?;
 ```
 
 #### Correct
 
-```nginx
-gzip_static on;
-gzip_vary on;
-```
-
 ```rust
-// An outdated gzip leaves the served path first; clients temporarily fall back to TXT.
-remove_outdated_gzip(gzip_path)?;
-compress_to_temporary_file(hash_path, gzip_temp_path)?;
-replace_file(gzip_temp_path, gzip_path)?;
+let txt = upload_or_resume_txt()?;
+let gzip = upload_or_resume_gzip()?;
+probe_both(&txt, &gzip).await?;
+publish_pair_in_one_transaction(&txt, &gzip).await?;
 ```

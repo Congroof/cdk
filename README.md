@@ -46,6 +46,11 @@ cp .env.example .env
 | `DATABASE_URL` | MySQL 连接字符串 | `mysql://root:password@127.0.0.1:3306/cdk_server` |
 | `JWT_SECRET` | JWT 签名密钥 | `your-super-secret-key` |
 | `SERVER_ADDR` | 服务监听地址 | `0.0.0.0:3000` |
+| `KDOCS_CREDENTIAL_KEY` | Base64 编码的 32 字节 AES-256-GCM 主密钥，部署后必须保持不变 | `openssl rand -base64 32` |
+| `SKINFORGE_HASH_SYNC_ENABLED` | 是否启用启动及周期 Hash 同步 | `true` |
+| `SKINFORGE_HASH_SOURCE_URL` | CommunityDragon Hash 源地址 | `https://raw.communitydragon.org/data/hashes/lol/hashes.game.txt` |
+| `SKINFORGE_HASH_MIRROR_DIR` | Hash 私有 staging 目录，不由 Nginx 暴露 | `/opt/skinforge-updates/hashes` |
+| `SKINFORGE_HASH_SYNC_INTERVAL_HOURS` | Hash 周期同步间隔 | `24` |
 
 ### 4. 启动后端
 
@@ -83,6 +88,12 @@ npm run build
 | POST | `/api/cdk/validate` | 校验 CDK 是否合法 | JWT |
 | POST | `/api/cdk/activate` | 激活 CDK（绑定机器码） | JWT |
 | POST | `/api/cdk/disable` | 禁用 CDK | JWT |
+| GET/POST | `/api/skinforge/kdocs-settings` | 查询或更新加密的云文档配置 | JWT |
+| GET/POST | `/api/skinforge/release` | 查询或发布最新 SkinForge Windows 版本 | JWT |
+| GET | `/api/skinforge/hash-status` | 查询 Hash 同步状态 | JWT |
+| POST | `/api/skinforge/hash-sync` | 手动触发 Hash 同步 | JWT |
+| GET | `/api/client/skinforge/update/{target}/{arch}/{version}` | Tauri 动态更新信息 | 无 |
+| GET | `/api/client/skinforge/hash` | 当前 Hash TXT/gzip OSS 元数据 | 无 |
 
 ### 接口示例
 

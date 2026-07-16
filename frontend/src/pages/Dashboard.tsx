@@ -9,6 +9,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Settings,
   ShieldBan,
 } from 'lucide-react';
 import Layout from '../components/Layout';
@@ -19,10 +20,11 @@ import UsageStats from '../components/UsageStats';
 import BannedMachines from '../components/BannedMachines';
 import FeedbackList from '../components/FeedbackList';
 import AnnouncementEditor from '../components/AnnouncementEditor';
+import SkinforgeManager from '../components/SkinforgeManager';
 import api from '../api';
 import type { Cdk } from '../types';
 
-type TabKey = 'cdk' | 'stats' | 'banned' | 'feedback' | 'announcement';
+type TabKey = 'cdk' | 'stats' | 'banned' | 'feedback' | 'announcement' | 'skinforge';
 
 const statusFilters: { value: string; label: string }[] = [
   { value: '', label: '全部' },
@@ -163,6 +165,17 @@ export default function Dashboard() {
           <Megaphone className="w-4 h-4" />
           公告管理
         </button>
+        <button
+          onClick={() => setActiveTab('skinforge')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+            activeTab === 'skinforge'
+              ? 'bg-gradient-to-r from-cyan-500/15 to-blue-500/15 text-cyan-400 shadow-sm'
+              : 'text-slate-400 hover:text-slate-300 hover:bg-white/5'
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          SkinForge
+        </button>
       </div>
 
       {activeTab === 'cdk' ? (
@@ -274,8 +287,10 @@ export default function Dashboard() {
         <BannedMachines />
       ) : activeTab === 'feedback' ? (
         <FeedbackList />
-      ) : (
+      ) : activeTab === 'announcement' ? (
         <AnnouncementEditor />
+      ) : (
+        <SkinforgeManager />
       )}
     </Layout>
   );

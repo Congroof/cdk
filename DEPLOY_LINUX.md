@@ -91,7 +91,19 @@ systemctl restart docker
 
 ---
 
-## 4. 构建与启动服务
+## 4. 配置 SkinForge 云文档密钥
+
+首次启动前生成一份 Base64 编码的 32 字节主密钥：
+
+```bash
+export KDOCS_CREDENTIAL_KEY="$(openssl rand -base64 32)"
+```
+
+将这个值保存到服务器的密码管理或安全环境配置中。Cookie 使用该密钥进行
+AES-256-GCM 加密；服务重启和重新部署时必须继续使用同一个值，否则数据库中的云文档
+凭证将无法解密。
+
+## 5. 构建与启动服务
 
 在项目根目录（即 `docker-compose.yml` 所在的目录）下，执行以下命令：
 
@@ -112,24 +124,24 @@ docker-compose up -d --build
 
 ---
 
-## 5. 验证部署
+## 6. 验证部署
 
 服务启动后，你可以通过以下方式验证是否部署成功：
 
-### 5.1 查看容器状态
+### 6.1 查看容器状态
 ```bash
 docker-compose ps
 ```
 你应该能看到 `mysql` 和 `cdk-server` 两个容器的状态都是 `Up`。
 
-### 5.2 查看服务日志
+### 6.2 查看服务日志
 如果遇到问题，可以查看日志：
 ```bash
 docker-compose logs -f cdk-server
 ```
 如果看到类似 `Server running on 0.0.0.0:3000` 的输出，说明后端服务已正常启动。
 
-### 5.3 访问管理后台
+### 6.3 访问管理后台
 在浏览器中输入你的服务器 IP 地址（例如 `http://192.168.x.x`），即可访问 CDK Server 的管理后台。
 
 **默认管理员账号：**
@@ -138,45 +150,27 @@ docker-compose logs -f cdk-server
 
 ---
 
-## 6. SkinForge 在线更新文件
+## 7. SkinForge 在线更新
 
-Docker 镜像内的 Nginx 已预留 `/skinforge/` 静态目录，用来给 SkinForge 的
-Tauri updater 提供 `latest.json` 和安装包下载。
+SkinForge 安装包和 `hashes.game.txt` 不再由 Nginx 直接下载。Nginx 只代理 API，
+服务端通过云文档的 `file_id/link_id` 动态换取临时 OSS 地址。
 
-宿主机目录：
-```bash
-./skinforge-updates
-```
+部署后登录管理后台的 “SkinForge” 页面：
 
-容器内目录：
-```bash
-/opt/skinforge-updates
-```
+1. 录入完整 Cookie、`group_id` 和 `parent_id`；保存前会在线验证，Cookie 不会回显。
+2. 使用客户端仓库的 `pnpm release:upload` 上传安装包并生成发布 JSON。
+3. 在管理后台导入 JSON、填写更新说明并发布。版本必须严格高于当前版本。
+4. Hash 可手动同步，也会在启动时及默认每 24 小时同步。TXT 和 gzip 都上传并验证
+   成功后才会同时切换公开版本。
 
-访问地址：
-```text
-http://62.234.58.74/skinforge/latest.json
-```
-
-推荐目录结构：
-```text
-/opt/skinforge-updates/
-  latest.json
-  releases/
-    1.2.0/
-      SkinForge_1.2.0_x64-setup.exe
-      SkinForge_1.2.0_x64-setup.exe.sig
-```
-
-`docker-compose.yml` 已经把宿主机 `./skinforge-updates` 挂载到容器内
-`/opt/skinforge-updates`。以后只维护 Docker 部署即可：更新发布时只需要替换
-这个目录里的文件，Nginx 会直接提供静态下载，不需要重启容器。
+`./skinforge-updates` 仍挂载到 `/opt/skinforge-updates`，但只用于 Hash staging 和
+失败重试，不再对外提供静态文件。旧云文档文件不会自动删除。
 
 ---
 
-## 7. 日常维护
+## 8. 日常维护
 
-### 7.1 更新代码并重新部署
+### 8.1 更新代码并重新部署
 当你在本地修改了代码并推送到 Git 仓库后，在服务器上执行以下命令更新服务：
 
 ```bash
@@ -186,13 +180,13 @@ docker-compose up -d --build
 ```
 *(你的 MySQL 数据保存在 Docker 的数据卷中，重新构建和启动应用容器**不会**丢失数据。)*
 
-### 7.2 停止服务
+### 8.2 停止服务
 ```bash
 docker-compose down
 ```
 *(这会停止并删除容器，但保留数据卷。)*
 
-### 7.3 进入 MySQL 数据库
+### 8.3 进入 MySQL 数据库
 如果你需要手动执行 SQL 语句：
 ```bash
 docker-compose exec mysql mysql -u root -pcdk-mysql-root-2026 -D cdk_server
@@ -200,7 +194,7 @@ docker-compose exec mysql mysql -u root -pcdk-mysql-root-2026 -D cdk_server
 
 ---
 
-## 8. 常见问题排查
+## 9. 常见问题排查
 
 *   **构建时 `cargo build` 卡住或极慢**：
     通常是网络问题。`Dockerfile` 中已经配置了中科大的 Cargo 镜像源（`sparse+https://mirrors.ustc.edu.cn/crates.io-index/`）。如果依然缓慢，请检查服务器网络。

@@ -9,6 +9,7 @@ pub enum AppError {
     Unauthorized(String),
     NotFound(String),
     Conflict(String),
+    ServiceUnavailable(String),
     Internal(String),
 }
 
@@ -19,6 +20,7 @@ impl IntoResponse for AppError {
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
+            AppError::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg),
             AppError::Internal(msg) => {
                 tracing::error!("Internal error: {}", msg);
                 (

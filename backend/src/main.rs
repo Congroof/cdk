@@ -3,8 +3,11 @@ mod db;
 mod errors;
 mod handlers;
 mod hash_sync;
+mod kdocs;
 mod middleware;
 mod models;
+
+use std::sync::Arc;
 
 use axum::http::Method;
 use axum::routing::{get, post};
@@ -15,6 +18,8 @@ use tower_http::cors::{Any, CorsLayer};
 pub struct AppState {
     pub db: sqlx::MySqlPool,
     pub jwt_secret: String,
+    pub kdocs: kdocs::KdocsService,
+    pub hash_sync: Arc<hash_sync::HashSyncController>,
 }
 
 #[tokio::main]
@@ -24,11 +29,17 @@ async fn main() {
 
     let cfg = config::Config::from_env();
     let pool = db::create_pool(&cfg.database_url).await;
+    let kdocs = kdocs::KdocsService::new(&cfg.kdocs_credential_key)
+        .expect("KDOCS_CREDENTIAL_KEY must be a Base64-encoded 32-byte key");
+    let hash_sync =
+        hash_sync::HashSyncController::new(cfg.hash_sync.clone(), pool.clone(), kdocs.clone());
     let state = AppState {
         db: pool,
         jwt_secret: cfg.jwt_secret.clone(),
+        kdocs,
+        hash_sync: hash_sync.clone(),
     };
-    hash_sync::spawn_hash_sync(cfg.hash_sync.clone());
+    hash_sync.spawn_schedule();
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -56,6 +67,23 @@ async fn main() {
         .route("/feedback/list", get(handlers::feedback::list))
         .route("/feedback/set-done", post(handlers::feedback::set_done))
         .route("/feedback/reply", post(handlers::feedback::reply))
+        .route(
+            "/skinforge/kdocs-settings",
+            get(handlers::skinforge::get_kdocs_settings)
+                .post(handlers::skinforge::save_kdocs_settings),
+        )
+        .route(
+            "/skinforge/release",
+            get(handlers::skinforge::get_release).post(handlers::skinforge::save_release),
+        )
+        .route(
+            "/skinforge/hash-status",
+            get(handlers::skinforge::get_hash_status),
+        )
+        .route(
+            "/skinforge/hash-sync",
+            post(handlers::skinforge::trigger_hash_sync),
+        )
         .route_layer(axum_mw::from_fn_with_state(
             state.clone(),
             middleware::auth::auth_middleware,
@@ -90,6 +118,14 @@ async fn main() {
         .route(
             "/client/u/{username}/feedback/query",
             post(handlers::feedback::query_for_user_client),
+        )
+        .route(
+            "/client/skinforge/update/{target}/{arch}/{current_version}",
+            get(handlers::skinforge::updater),
+        )
+        .route(
+            "/client/skinforge/hash",
+            get(handlers::skinforge::public_hash),
         );
 
     let app = Router::new()

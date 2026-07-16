@@ -115,3 +115,80 @@ export interface Announcement {
   is_enabled: boolean;
   updated_at: string;
 }
+
+export interface KdocsSettings {
+  configured: boolean;
+  cookieHint: string | null;
+  groupId: string | null;
+  parentId: string | null;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}
+
+export interface ReleaseManifestArtifact {
+  fileId: string;
+  linkId: string;
+  linkUrl?: string | null;
+  fileName: string;
+  fileSize: number;
+  sha1: string;
+  sha256: string;
+  groupId: string;
+  parentId: string;
+}
+
+export interface ReleaseManifest {
+  schemaVersion: number;
+  product: string;
+  platform: string;
+  version: string;
+  pubDate: string;
+  signature: string;
+  artifact: ReleaseManifestArtifact;
+}
+
+export interface SkinforgeRelease {
+  version: string;
+  notes: string;
+  pubDate: string;
+  signature: string;
+  fileId: number;
+  linkId: string;
+  linkUrl: string | null;
+  fileName: string;
+  fileSize: number;
+  sha1: string;
+  sha256: string;
+  updatedBy: string | null;
+  updatedAt: string;
+}
+
+export interface HashReleaseSummary {
+  version: string;
+  canonicalSize: number;
+  canonicalSha256: string;
+  txtFileName: string;
+  txtSize: number;
+  gzipFileName: string;
+  gzipSize: number;
+  publishedAt: string;
+}
+
+export interface HashSyncStatus {
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+  lastCandidateVersion: string | null;
+  updatedAt: string;
+}
+
+export interface HashManagementStatus {
+  running: boolean;
+  sync: HashSyncStatus;
+  current: HashReleaseSummary | null;
+  pending: {
+    version: string;
+    txtUploaded: boolean;
+    gzipUploaded: boolean;
+  } | null;
+}

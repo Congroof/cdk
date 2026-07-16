@@ -6,6 +6,7 @@ pub struct Config {
     pub database_url: String,
     pub jwt_secret: String,
     pub server_addr: String,
+    pub kdocs_credential_key: String,
     pub hash_sync: HashSyncConfig,
 }
 
@@ -14,7 +15,6 @@ pub struct HashSyncConfig {
     pub enabled: bool,
     pub source_url: String,
     pub mirror_dir: PathBuf,
-    pub public_base_url: String,
     pub interval_hours: u64,
 }
 
@@ -24,6 +24,8 @@ impl Config {
             database_url: env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
             jwt_secret: env::var("JWT_SECRET").expect("JWT_SECRET must be set"),
             server_addr: env::var("SERVER_ADDR").unwrap_or_else(|_| "0.0.0.0:3000".to_string()),
+            kdocs_credential_key: env::var("KDOCS_CREDENTIAL_KEY")
+                .expect("KDOCS_CREDENTIAL_KEY must be set"),
             hash_sync: HashSyncConfig::from_env(),
         }
     }
@@ -39,8 +41,6 @@ impl HashSyncConfig {
             mirror_dir: env::var("SKINFORGE_HASH_MIRROR_DIR")
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| PathBuf::from("/opt/skinforge-updates/hashes")),
-            public_base_url: env::var("SKINFORGE_HASH_PUBLIC_BASE_URL")
-                .unwrap_or_else(|_| "http://62.234.58.74/skinforge/hashes".to_string()),
             interval_hours: env::var("SKINFORGE_HASH_SYNC_INTERVAL_HOURS")
                 .ok()
                 .and_then(|value| value.parse::<u64>().ok())
