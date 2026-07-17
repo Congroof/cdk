@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 7
 - **Last Active**: 2026-07-17
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~213 | Active |
+| `journal-1.md` | ~246 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-07-17 | Optimize feedback list viewing experience | `843d4fc` | `main` |
 | 6 | 2026-07-17 | SkinForge OSS 服务端分发 | `7477496` | `main` |
 | 5 | 2026-07-16 | 增加公告管理与公开获取 | `3ab02b7`, `5c5043d` | `main` |
 | 4 | 2026-07-16 | 为 game hash 增加 gzip 静态压缩 | `255c6f3`, `9da5b21` | `main` |
