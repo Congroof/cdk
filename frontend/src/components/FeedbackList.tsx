@@ -246,22 +246,18 @@ export default function FeedbackList() {
         </div>
       </div>
 
-      <div className="overflow-x-auto border border-white/5 rounded-xl">
-        <table className="w-full text-sm">
+      <div className="overflow-hidden border border-white/5 rounded-xl">
+        <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-white/5 bg-white/[0.02]">
-              <th className="text-left px-4 py-3 font-medium text-slate-400 min-w-[320px]">反馈内容</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-400">类型</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-400">关联信息</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-400">状态</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-400">提交时间</th>
-              <th className="text-right px-4 py-3 font-medium text-slate-400">操作</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-400">反馈内容</th>
+              <th className="w-[360px] text-right px-4 py-3 font-medium text-slate-400">操作</th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-16 text-slate-500">
+                <td colSpan={2} className="text-center py-16 text-slate-500">
                   {loading ? '加载中...' : '暂无反馈记录'}
                 </td>
               </tr>
@@ -272,82 +268,14 @@ export default function FeedbackList() {
                   className="border-b border-white/5 hover:bg-white/[0.02] transition-colors align-top"
                 >
                   <td className="px-4 py-3">
-                    <div className="max-w-xl min-h-14 flex flex-col justify-center">
+                    <div className="min-h-10 flex items-center">
                       <p
-                        className="text-slate-200 truncate leading-6"
+                        className="w-full text-slate-200 truncate leading-6"
                         title={item.content}
                       >
                         {item.content}
                       </p>
-                      <div className="flex h-6 items-center gap-2 mt-2 overflow-hidden">
-                        {item.contact && (
-                          <span className="shrink-0 text-xs text-slate-400 bg-white/5 px-2 py-1 rounded">
-                            联系：{item.contact}
-                          </span>
-                        )}
-                        {item.app_version && (
-                          <span className="shrink-0 text-xs text-slate-400 bg-white/5 px-2 py-1 rounded">
-                            版本：{item.app_version}
-                          </span>
-                        )}
-                        {item.platform && (
-                          <span className="shrink-0 text-xs text-slate-400 bg-white/5 px-2 py-1 rounded">
-                            平台：{item.platform}
-                          </span>
-                        )}
-                        {item.reply && (
-                          <span className="inline-flex shrink-0 items-center gap-1 text-xs text-indigo-300 bg-indigo-500/5 px-2 py-1 rounded">
-                            <MessageSquareReply className="w-3 h-3" />
-                            已回复
-                          </span>
-                        )}
-                      </div>
                     </div>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-medium border rounded-full bg-sky-500/10 text-sky-400 border-sky-500/20">
-                      <MessageSquareText className="w-3 h-3" />
-                      {typeLabel[item.feedback_type] || item.feedback_type}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 min-w-[220px]">
-                    <div className="space-y-1">
-                      {item.machine_code && (
-                        <code className="block text-xs text-slate-400 bg-white/5 px-2 py-1 rounded font-mono max-w-[240px] truncate">
-                          机器：{item.machine_code}
-                        </code>
-                      )}
-                      {item.cdk_code && (
-                        <code className="block text-xs text-slate-400 bg-white/5 px-2 py-1 rounded font-mono max-w-[240px] truncate">
-                          CDK：{item.cdk_code}
-                        </code>
-                      )}
-                      {!item.machine_code && !item.cdk_code && (
-                        <span className="text-slate-600">-</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-medium border rounded-full ${
-                        item.is_done
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                      }`}
-                    >
-                      {item.is_done ? (
-                        <CheckCircle2 className="w-3 h-3" />
-                      ) : (
-                        <Circle className="w-3 h-3" />
-                      )}
-                      {item.is_done ? '已完成' : '待处理'}
-                    </span>
-                    {item.done_at && (
-                      <div className="text-xs text-slate-500 mt-1">{formatDate(item.done_at)}</div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                    {formatDate(item.created_at)}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-2">
@@ -356,7 +284,7 @@ export default function FeedbackList() {
                         className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 bg-blue-500/5 hover:bg-blue-500/10 border border-blue-500/10 rounded-lg transition-all"
                       >
                         <Eye className="w-3.5 h-3.5" />
-                        查看反馈
+                        查看详情
                       </button>
                       <button
                         onClick={() => openReplyEditor(item)}
