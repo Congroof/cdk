@@ -244,3 +244,36 @@ Unified feedback table row heights, added a full feedback detail modal, and pres
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: Remove feedback list horizontal scroll
+
+**Date**: 2026-07-18
+**Task**: Remove feedback list horizontal scroll
+**Branch**: `main`
+
+### Summary
+
+Reduced the feedback table to content and actions, moved type, related information, status, and timestamps into the detail modal, and verified zero horizontal overflow at a 1280px viewport.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `09146f9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

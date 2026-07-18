@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
-- **Last Active**: 2026-07-17
+- **Total Sessions**: 8
+- **Last Active**: 2026-07-18
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~246 | Active |
+| `journal-1.md` | ~279 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-07-18 | Remove feedback list horizontal scroll | `09146f9` | `main` |
 | 7 | 2026-07-17 | Optimize feedback list viewing experience | `843d4fc` | `main` |
 | 6 | 2026-07-17 | SkinForge OSS 服务端分发 | `7477496` | `main` |
 | 5 | 2026-07-16 | 增加公告管理与公开获取 | `3ab02b7`, `5c5043d` | `main` |
