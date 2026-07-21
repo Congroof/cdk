@@ -1,3 +1,4 @@
+mod cdk_events;
 mod config;
 mod db;
 mod errors;
@@ -18,6 +19,7 @@ use tower_http::cors::{Any, CorsLayer};
 pub struct AppState {
     pub db: sqlx::MySqlPool,
     pub jwt_secret: String,
+    pub cdk_connections: Arc<cdk_events::CdkConnectionRegistry>,
     pub kdocs: kdocs::KdocsService,
     pub hash_sync: Arc<hash_sync::HashSyncController>,
 }
@@ -36,6 +38,7 @@ async fn main() {
     let state = AppState {
         db: pool,
         jwt_secret: cfg.jwt_secret.clone(),
+        cdk_connections: Arc::new(cdk_events::CdkConnectionRegistry::new()),
         kdocs,
         hash_sync: hash_sync.clone(),
     };
@@ -99,6 +102,10 @@ async fn main() {
         );
 
     let user_client_routes = Router::new()
+        .route(
+            "/client/u/{username}/cdk-events",
+            get(handlers::cdk_events::connect),
+        )
         .route(
             "/client/u/{username}/announcement",
             get(handlers::announcement::get_for_client),

@@ -94,6 +94,7 @@ npm run build
 | POST | `/api/skinforge/hash-sync` | 手动触发 Hash 同步 | JWT |
 | GET | `/api/client/skinforge/update/{target}/{arch}/{version}` | Tauri 动态更新信息 | 无 |
 | GET | `/api/client/skinforge/hash` | 当前 Hash TXT/gzip OSS 元数据 | 无 |
+| GET (WebSocket) | `/api/client/u/{username}/cdk-events` | CDK 换绑失效事件 | `Authorization: Bearer <CDK>` + `X-SkinForge-Machine` |
 
 ### 接口示例
 
@@ -161,8 +162,23 @@ server {
 
     location /api/ {
         proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 75s;
     }
 }
 ```
+
+`$connection_upgrade` 需要在 Nginx 的 `http` 作用域定义：
+
+```nginx
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    '' close;
+}
+```
+
+当前示例保留 HTTP/WS 明文链路；CDK Header 仍可能被网络监听，生产环境后续应迁移到 HTTPS/WSS。

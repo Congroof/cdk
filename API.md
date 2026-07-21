@@ -82,8 +82,34 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 25 | POST | `/api/skinforge/hash-sync` | 是 | 手动触发 Hash 同步 |
 | 26 | GET | `/api/client/skinforge/update/{target}/{arch}/{current_version}` | 否 | Tauri 动态更新 |
 | 27 | GET | `/api/client/skinforge/hash` | 否 | 获取 Hash OSS 下载元数据 |
+| 28 | GET (WebSocket) | `/api/client/u/{username}/cdk-events` | CDK + HWID Header | 监听当前绑定的换绑失效事件 |
 
 > `/api/client/*` 和 `/api/cdk/validate|activate` 使用相同的处理逻辑，区别仅在于是否需要 JWT 认证。
+
+### CDK 换绑失效 WebSocket
+
+客户端完成 HTTP 验证或激活后，使用同一租户、CDK 和机器码建立连接：
+
+```http
+GET /api/client/u/{username}/cdk-events
+Authorization: Bearer <CDK>
+X-SkinForge-Machine: <HWID>
+Upgrade: websocket
+```
+
+服务端只允许当前处于 `activated`、未过期、未禁用且机器码一致的绑定升级连接。CDK 被成功换绑后，旧机器连接会收到以下事件并由服务端关闭：
+
+```json
+{
+  "version": 1,
+  "eventId": "uuid",
+  "type": "cdkBindingInvalidated",
+  "occurredAt": "2026-07-21T12:00:00Z",
+  "payload": { "reason": "rebound" }
+}
+```
+
+事件不包含 CDK、机器码或 IP。服务端每 30 秒发送 Ping，单消息上限 64KB，全局连接上限 3000。当前生产链路为 `ws://` 明文连接，不能抵御网络监听或篡改；部署时必须先启用 Nginx Upgrade 转发，再发布依赖该通道的客户端。
 
 ---
 

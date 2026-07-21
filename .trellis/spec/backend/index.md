@@ -27,6 +27,7 @@ Before writing backend code, read these guideline files:
 7. [Hash Dictionary Sync](./hash-sync.md) — when changing SkinForge Hash staging, paired OSS upload, or public metadata
 8. [Announcement API](./announcement-api.md) — when changing announcement storage, admin management, or public client delivery
 9. [SkinForge Delivery API](./skinforge-delivery.md) — when changing KDocs credentials, software publishing, updater responses, or OSS URL resolution
+10. [CDK Binding Events](./cdk-binding-events.md) — when changing activation/rebind transactions, binding history, WebSocket invalidation, or Nginx Upgrade
 
 ---
 
@@ -43,6 +44,7 @@ Before writing backend code, read these guideline files:
 | [Hash Dictionary Sync](./hash-sync.md) | Private staging, paired TXT/gzip OSS publication, and public metadata | Filled |
 | [Announcement API](./announcement-api.md) | Tenant-owned announcement management and public read contracts | Filled |
 | [SkinForge Delivery API](./skinforge-delivery.md) | Encrypted KDocs settings and global dynamic delivery APIs | Filled |
+| [CDK Binding Events](./cdk-binding-events.md) | Atomic single-machine binding history and bounded realtime invalidation | Filled |
 
 ---
 

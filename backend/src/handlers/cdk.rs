@@ -1,4 +1,7 @@
+use std::net::IpAddr;
+
 use axum::extract::{Query, State};
+use axum::http::HeaderMap;
 use axum::{Extension, Json};
 use chrono::Utc;
 use rand::Rng;
@@ -472,20 +475,44 @@ pub async fn validate(
 
 pub async fn activate(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<ActivateRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    if payload.code.is_empty() || payload.machine_code.is_empty() {
-        return Err(AppError::BadRequest("激活码和机器码不能为空".to_string()));
-    }
-
     let admin_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = 'admin'")
         .fetch_one(&state.db)
         .await?;
 
+    activate_for_owner(&state, admin_id.0, payload, trusted_client_ip(&headers)).await
+}
+
+fn trusted_client_ip(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("x-real-ip")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .and_then(|value| value.parse::<IpAddr>().ok())
+        .map(|value| value.to_string())
+}
+
+async fn activate_for_owner(
+    state: &AppState,
+    owner_id: i64,
+    payload: ActivateRequest,
+    client_ip: Option<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let code = payload.code.trim();
+    let machine_code = payload.machine_code.trim();
+    if code.is_empty() || machine_code.is_empty() {
+        return Err(AppError::BadRequest("激活码和机器码不能为空".to_string()));
+    }
+    if code.chars().count() > 64 || machine_code.chars().count() > 256 {
+        return Err(AppError::BadRequest("激活码或机器码过长".to_string()));
+    }
+
     let banned: Option<(i64,)> =
         sqlx::query_as("SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?")
-            .bind(&payload.machine_code)
-            .bind(admin_id.0)
+            .bind(machine_code)
+            .bind(owner_id)
             .fetch_optional(&state.db)
             .await?;
     if banned.is_some() {
@@ -497,25 +524,26 @@ pub async fn activate(
     let _ = sqlx::query(
         "INSERT INTO usage_logs (machine_code, cdk_code, action, created_by) VALUES (?, ?, 'activate', ?)"
     )
-    .bind(&payload.machine_code)
-    .bind(&payload.code)
-    .bind(admin_id.0)
+    .bind(machine_code)
+    .bind(code)
+    .bind(owner_id)
     .execute(&state.db)
     .await;
 
+    let mut tx = state.db.begin().await?;
     let row = sqlx::query_as::<_, CdkRow>(
-        "SELECT * FROM cdkeys WHERE code = ? AND (created_by = ? OR created_by IS NULL)",
+        "SELECT * FROM cdkeys WHERE code = ? AND created_by = ? FOR UPDATE",
     )
-    .bind(&payload.code)
-    .bind(admin_id.0)
-    .fetch_optional(&state.db)
+    .bind(code)
+    .bind(owner_id)
+    .fetch_optional(&mut *tx)
     .await?
     .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
 
     let hours = row.duration_as_hours();
-    let cdk = Cdk::from(row);
+    let status = CdkStatus::from_str(&row.status);
 
-    match cdk.status {
+    match status {
         CdkStatus::Disabled => {
             return Err(AppError::BadRequest("CDK 已被禁用".to_string()));
         }
@@ -523,41 +551,64 @@ pub async fn activate(
             return Err(AppError::BadRequest("CDK 已过期".to_string()));
         }
         CdkStatus::Activated => {
-            if let Some(expires_at) = cdk.expires_at {
+            if let Some(expires_at) = row.expires_at {
                 if Utc::now().naive_utc() > expires_at {
                     sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE id = ?")
-                        .bind(cdk.id)
-                        .execute(&state.db)
+                        .bind(row.id)
+                        .execute(&mut *tx)
                         .await?;
+                    tx.commit().await?;
                     return Err(AppError::BadRequest("CDK 已过期".to_string()));
                 }
             }
-            if cdk.machine_code.as_deref() == Some(&payload.machine_code) {
+            if row.machine_code.as_deref() == Some(machine_code) {
+                tx.commit().await?;
                 return Ok(Json(serde_json::json!({
                     "success": true,
                     "data": {
                         "message": "CDK 已激活于此机器",
-                        "expires_at": cdk.expires_at,
+                        "expires_at": row.expires_at,
                     },
                 })));
             }
 
-            // 允许换绑：更新机器码
             let result = sqlx::query("UPDATE cdkeys SET machine_code = ? WHERE id = ?")
-                .bind(&payload.machine_code)
-                .bind(cdk.id)
-                .execute(&state.db)
+                .bind(machine_code)
+                .bind(row.id)
+                .execute(&mut *tx)
                 .await?;
 
             if result.rows_affected() == 0 {
                 return Err(AppError::Conflict("CDK 状态已变更，请重试".to_string()));
             }
 
+            sqlx::query(
+                "INSERT INTO cdk_binding_history \
+                 (cdk_id, cdk_code, event_type, old_machine_code, new_machine_code, client_ip, created_by) \
+                 VALUES (?, ?, 'rebind', ?, ?, ?, ?)",
+            )
+            .bind(row.id)
+            .bind(&row.code)
+            .bind(&row.machine_code)
+            .bind(machine_code)
+            .bind(&client_ip)
+            .bind(owner_id)
+            .execute(&mut *tx)
+            .await?;
+
+            tx.commit().await?;
+
+            if let Some(old_machine_code) = row.machine_code.as_deref() {
+                state
+                    .cdk_connections
+                    .invalidate_binding(owner_id, row.id, old_machine_code);
+            }
+
             return Ok(Json(serde_json::json!({
                 "success": true,
                 "data": {
                     "message": "CDK 换绑成功",
-                    "expires_at": cdk.expires_at,
+                    "expires_at": row.expires_at,
                 },
             })));
         }
@@ -570,16 +621,31 @@ pub async fn activate(
     let result = sqlx::query(
         "UPDATE cdkeys SET status = 'activated', machine_code = ?, activated_at = ?, expires_at = ? WHERE id = ? AND status = 'unused'"
     )
-    .bind(&payload.machine_code)
+    .bind(machine_code)
     .bind(now)
     .bind(expires_at)
-    .bind(cdk.id)
-    .execute(&state.db)
+    .bind(row.id)
+    .execute(&mut *tx)
     .await?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::Conflict("CDK 状态已变更，请重试".to_string()));
     }
+
+    sqlx::query(
+        "INSERT INTO cdk_binding_history \
+         (cdk_id, cdk_code, event_type, old_machine_code, new_machine_code, client_ip, created_by) \
+         VALUES (?, ?, 'activate', NULL, ?, ?, ?)",
+    )
+    .bind(row.id)
+    .bind(&row.code)
+    .bind(machine_code)
+    .bind(&client_ip)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -956,119 +1022,32 @@ pub async fn user_validate(
 pub async fn user_activate(
     State(state): State<AppState>,
     axum::extract::Path(username): axum::extract::Path<String>,
+    headers: HeaderMap,
     Json(payload): Json<ActivateRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    if payload.code.is_empty() || payload.machine_code.is_empty() {
-        return Err(AppError::BadRequest("激活码和机器码不能为空".to_string()));
-    }
-
     let owner_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
         .bind(&username)
         .fetch_optional(&state.db)
         .await?
         .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
 
-    let banned: Option<(i64,)> =
-        sqlx::query_as("SELECT id FROM banned_machines WHERE machine_code = ? AND created_by = ?")
-            .bind(&payload.machine_code)
-            .bind(owner_id.0)
-            .fetch_optional(&state.db)
-            .await?;
-    if banned.is_some() {
-        return Err(AppError::BadRequest(
-            "该机器码已被封禁，无法激活".to_string(),
-        ));
+    activate_for_owner(&state, owner_id.0, payload, trusted_client_ip(&headers)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trusted_client_ip_only_accepts_literal_ip_addresses() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-real-ip", "203.0.113.8".parse().unwrap());
+        assert_eq!(trusted_client_ip(&headers).as_deref(), Some("203.0.113.8"));
+
+        headers.insert("x-real-ip", "2001:db8::1".parse().unwrap());
+        assert_eq!(trusted_client_ip(&headers).as_deref(), Some("2001:db8::1"));
+
+        headers.insert("x-real-ip", "203.0.113.8, 10.0.0.1".parse().unwrap());
+        assert_eq!(trusted_client_ip(&headers), None);
     }
-
-    let _ = sqlx::query(
-        "INSERT INTO usage_logs (machine_code, cdk_code, action, created_by) VALUES (?, ?, 'activate', ?)"
-    )
-    .bind(&payload.machine_code)
-    .bind(&payload.code)
-    .bind(owner_id.0)
-    .execute(&state.db)
-    .await;
-
-    let row = sqlx::query_as::<_, CdkRow>("SELECT * FROM cdkeys WHERE code = ? AND created_by = ?")
-        .bind(&payload.code)
-        .bind(owner_id.0)
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
-
-    let hours = row.duration_as_hours();
-    let cdk = Cdk::from(row);
-
-    match cdk.status {
-        CdkStatus::Disabled => {
-            return Err(AppError::BadRequest("CDK 已被禁用".to_string()));
-        }
-        CdkStatus::Expired => {
-            return Err(AppError::BadRequest("CDK 已过期".to_string()));
-        }
-        CdkStatus::Activated => {
-            if let Some(expires_at) = cdk.expires_at {
-                if Utc::now().naive_utc() > expires_at {
-                    sqlx::query("UPDATE cdkeys SET status = 'expired' WHERE id = ?")
-                        .bind(cdk.id)
-                        .execute(&state.db)
-                        .await?;
-                    return Err(AppError::BadRequest("CDK 已过期".to_string()));
-                }
-            }
-            if cdk.machine_code.as_deref() == Some(&payload.machine_code) {
-                return Ok(Json(serde_json::json!({
-                    "success": true,
-                    "data": {
-                        "message": "CDK 已激活于此机器",
-                        "expires_at": cdk.expires_at,
-                    },
-                })));
-            }
-
-            let result = sqlx::query("UPDATE cdkeys SET machine_code = ? WHERE id = ?")
-                .bind(&payload.machine_code)
-                .bind(cdk.id)
-                .execute(&state.db)
-                .await?;
-
-            if result.rows_affected() == 0 {
-                return Err(AppError::Conflict("CDK 状态已变更，请重试".to_string()));
-            }
-
-            return Ok(Json(serde_json::json!({
-                "success": true,
-                "data": {
-                    "message": "CDK 换绑成功",
-                    "expires_at": cdk.expires_at,
-                },
-            })));
-        }
-        CdkStatus::Unused => {}
-    }
-
-    let now = Utc::now().naive_utc();
-    let expires_at = now + chrono::Duration::hours(hours);
-
-    let result = sqlx::query(
-        "UPDATE cdkeys SET status = 'activated', machine_code = ?, activated_at = ?, expires_at = ? WHERE id = ? AND status = 'unused'"
-    )
-    .bind(&payload.machine_code)
-    .bind(now)
-    .bind(expires_at)
-    .bind(cdk.id)
-    .execute(&state.db)
-    .await?;
-
-    if result.rows_affected() == 0 {
-        return Err(AppError::Conflict("CDK 状态已变更，请重试".to_string()));
-    }
-
-    Ok(Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "message": "CDK 激活成功",
-            "expires_at": expires_at,
-        },
-    })))
 }
