@@ -13,6 +13,8 @@ use crate::AppState;
 const MACHINE_HEADER: &str = "x-skinforge-machine";
 const MAX_CREDENTIAL_LEN: usize = 256;
 const MAX_MESSAGE_SIZE: usize = 64 * 1024;
+const SOCKET_BUFFER_SIZE: usize = 8 * 1024;
+const MAX_WRITE_BUFFER_SIZE: usize = MAX_MESSAGE_SIZE;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
 const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -59,6 +61,9 @@ pub async fn connect(
     let db = state.db.clone();
     let key = CdkConnectionKey::new(owner_id, binding.0, machine_code);
     Ok(ws
+        .read_buffer_size(SOCKET_BUFFER_SIZE)
+        .write_buffer_size(SOCKET_BUFFER_SIZE)
+        .max_write_buffer_size(MAX_WRITE_BUFFER_SIZE)
         .max_frame_size(MAX_MESSAGE_SIZE)
         .max_message_size(MAX_MESSAGE_SIZE)
         .on_upgrade(move |socket| handle_socket(socket, registry, db, key)))

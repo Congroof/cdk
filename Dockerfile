@@ -33,6 +33,8 @@ FROM debian:bookworm-slim
 
 RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && apt-get install -y ca-certificates nginx && rm -rf /var/lib/apt/lists/* && \
+    sed -i 's/worker_connections 768;/worker_connections 8192;/' /etc/nginx/nginx.conf && \
+    grep -q 'worker_connections 8192;' /etc/nginx/nginx.conf && \
     mkdir -p /opt/skinforge-updates/hashes
 
 COPY --from=backend-builder /build/backend/target/release/cdk-server /usr/local/bin/cdk-server
