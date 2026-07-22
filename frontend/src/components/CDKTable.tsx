@@ -85,8 +85,6 @@ export default function CDKTable({
               <th className="text-left px-4 py-3 font-medium text-slate-400">状态</th>
               <th className="text-left px-4 py-3 font-medium text-slate-400">有效期</th>
               <th className="text-left px-4 py-3 font-medium text-slate-400">机器码</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-400">备注</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-400">创建时间</th>
               <th className="text-left px-4 py-3 font-medium text-slate-400">过期时间</th>
               <th className="text-right px-4 py-3 font-medium text-slate-400">操作</th>
             </tr>
@@ -94,7 +92,7 @@ export default function CDKTable({
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-16 text-slate-500">
+                <td colSpan={6} className="text-center py-16 text-slate-500">
                   暂无数据
                 </td>
               </tr>
@@ -139,25 +137,6 @@ export default function CDKTable({
                         <span className="text-slate-600">-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      {item.remark ? (
-                        <div className="group relative">
-                          <span className="text-slate-400 max-w-[120px] truncate block">
-                            {item.remark}
-                          </span>
-                          {item.remark.length > 10 && (
-                            <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-10">
-                              <div className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-200 shadow-xl max-w-xs break-all">
-                                {item.remark}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-slate-600">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-slate-400">{formatDate(item.created_at)}</td>
                     <td className="px-4 py-3 text-slate-400">{formatDate(item.expires_at)}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="inline-flex items-center gap-2">
