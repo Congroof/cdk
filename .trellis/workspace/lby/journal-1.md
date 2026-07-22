@@ -277,3 +277,36 @@ Reduced the feedback table to content and actions, moved type, related informati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: CDK 绑定历史可视化
+
+**Date**: 2026-07-22
+**Task**: CDK 绑定历史可视化
+**Branch**: `main`
+
+### Summary
+
+新增租户隔离的 CDK 绑定历史查询、桌面端设备汇总与换绑时间线，统计成功绑定次数并展示审计 IP；同步 API/规格并修复前端 lint 基线。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9d726d7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
