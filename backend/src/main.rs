@@ -56,6 +56,10 @@ async fn main() {
         )
         .route("/cdk/generate", post(handlers::cdk::generate))
         .route("/cdk/list", get(handlers::cdk::list))
+        .route(
+            "/cdk/{cdk_id}/binding-history",
+            get(handlers::cdk::binding_history),
+        )
         .route("/cdk/stats", get(handlers::cdk::stats))
         .route("/cdk/export", get(handlers::cdk::export))
         .route("/cdk/usage-stats", get(handlers::cdk::usage_stats))

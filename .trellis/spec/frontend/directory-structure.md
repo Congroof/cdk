@@ -32,7 +32,8 @@ frontend/
     │   ├── CDKTable.tsx    # CDK data table with pagination
     │   ├── CreateModal.tsx # CDK generation form modal
     │   ├── ExportModal.tsx # Export filter modal
-    │   ├── Toast.tsx       # Toast notification system (context + provider)
+    │   ├── Toast.tsx       # Toast provider and rendered notifications
+    │   ├── toastContext.ts # Toast context types + useToast hook
     │   ├── UsageStats.tsx  # Usage statistics dashboard
     │   ├── BannedMachines.tsx  # Ban management component
     │   └── FeedbackList.tsx    # User feedback list / filters / set-done

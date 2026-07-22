@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { copyToClipboard } from '../utils/clipboard';
-import { useToast } from './Toast';
+import { useToast } from './toastContext';
 
 interface Props {
   text: string;

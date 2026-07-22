@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import axios from 'axios';
 import {
   Plus,
   RefreshCw,
@@ -10,7 +11,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import api from '../api';
-import { useToast } from './Toast';
+import { useToast } from './toastContext';
 import type { BannedMachine } from '../types';
 
 export default function BannedMachines() {
@@ -33,7 +34,7 @@ export default function BannedMachines() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, any> = { page, page_size: pageSize };
+      const params: Record<string, string | number> = { page, page_size: pageSize };
       if (search) params.search = search;
       const res = await api.get('/banned/list', { params });
       if (res.data.success) {
@@ -48,7 +49,7 @@ export default function BannedMachines() {
   }, [page, pageSize, search]);
 
   useEffect(() => {
-    fetchData();
+    void Promise.resolve().then(fetchData);
   }, [fetchData]);
 
   const handleSearch = (e: React.FormEvent) => {
@@ -75,8 +76,11 @@ export default function BannedMachines() {
         setBanReason('');
         fetchData();
       }
-    } catch (err: any) {
-      toast(err.response?.data?.error || '封禁失败', 'error');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && typeof err.response?.data?.error === 'string'
+        ? err.response.data.error
+        : '封禁失败';
+      toast(message, 'error');
     } finally {
       setBanning(false);
     }
@@ -92,8 +96,11 @@ export default function BannedMachines() {
         setConfirmUnban(null);
         fetchData();
       }
-    } catch (err: any) {
-      toast(err.response?.data?.error || '解禁失败', 'error');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && typeof err.response?.data?.error === 'string'
+        ? err.response.data.error
+        : '解禁失败';
+      toast(message, 'error');
     } finally {
       setUnbanning(false);
     }

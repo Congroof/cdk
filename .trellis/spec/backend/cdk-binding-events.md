@@ -15,6 +15,7 @@ and an online notification; database commit order is the security boundary.
 POST /api/client/u/{username}/activate
 POST /api/client/activate
 GET  /api/client/u/{username}/cdk-events  (WebSocket)
+GET  /api/cdk/{cdk_id}/binding-history?page=1&page_size=50  (JWT admin)
 
 Authorization: Bearer <CDK>
 X-SkinForge-Machine: <HWID>
@@ -68,6 +69,22 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
   second check or the pre-upgrade-check/registration race reappears.
 - Schema changes stay synchronized in `backend/src/db.rs`, the numbered manual
   migration, and `deploy/mysql-init/01_schema.sql`.
+- The admin binding-history route resolves the JWT username to `users.id`, then
+  checks `cdkeys.id = cdk_id AND created_by = owner` before reading history.
+  Unknown and cross-tenant IDs both return `CDK 不存在`; never reveal whether
+  another tenant owns the requested numeric ID.
+- Binding-history metrics come only from committed `cdk_binding_history` rows.
+  `binding_count` counts all rows, `rebind_count` counts `event_type = rebind`,
+  and each machine's count groups `new_machine_code`. Do not derive these values
+  from `usage_logs`, which also contains failed/mismatched validation attempts.
+- The history response exposes `summary`, `machines`, `events`, and `pagination`.
+  `summary.current_machine_code` comes from `cdkeys`; events use stable
+  `created_at DESC, id DESC` ordering with page size default 50 and maximum 100.
+  Machine summaries return at most the 100 most recently bound machines while
+  `summary.machine_count` retains the complete distinct count. The desktop UI
+  must label the metric `成功绑定次数` and disclose when machine rows are truncated.
+- Client IP is admin-only audit data. It may appear in the JWT-protected history
+  timeline, but must not enter public client responses or WebSocket events.
 
 ### 4. Validation & Error Matrix
 
@@ -83,6 +100,10 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 | client sends text/binary business data | close 1008 |
 | packaged Nginx default no longer matches the Dockerfile replacement | image build fails at the post-replacement assertion |
 | deployed Nginx still reports `worker_connections 768` | image was not rebuilt/recreated; do not publish the WS-dependent client |
+| history CDK does not exist or belongs to another tenant | admin HTTP 404 `CDK 不存在` |
+| history page is 0 / page size is 0 | clamp both to 1 |
+| history page size exceeds 100 | clamp to 100 |
+| CDK exists but has no history rows | success with zero counts and empty arrays |
 
 ### 5. Good / Base / Bad Cases
 
@@ -98,6 +119,14 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 - Bad: reading arbitrary `X-Forwarded-For` input records attacker-controlled audit text.
 - Bad: treating `MAX_CONNECTIONS = 3000` as sufficient while Nginx still allows
   only 768 connections per worker.
+- Good: A -> B -> A produces machine A count 2, machine B count 1, binding count
+  3, and rebind count 2; current machine A is marked from `cdkeys`.
+- Base: a pre-history CDK returns its current `cdkeys.machine_code` with zero
+  history counts rather than fabricating an activation event.
+- Bad: querying history by `cdk_id` without `created_by` lets one tenant enumerate
+  another tenant's machine codes and client IPs.
+- Bad: counting `usage_logs` labels failed guesses and periodic validation calls
+  as successful CDK usage.
 
 ### 6. Tests Required
 
@@ -116,6 +145,13 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 - Capacity probe: hold 600 authenticated idle sockets for at least 15 minutes;
   record Rust RSS before/after, verify heartbeats remain stable, and verify RSS
   returns near baseline after disconnecting all clients.
+- Admin history unit tests: default/min/max pagination and current-machine mapping.
+- Admin history integration tests when MySQL is available: empty history,
+  activate A, A -> B -> A aggregation, stable event paging, client IP/null IP,
+  and cross-tenant ID returning the same 404 as an unknown ID.
+- Frontend checks: exact snake_case DTO fields, current-machine badge, successful
+  binding count label, empty/error/loading states, event paging, long HWID/IP
+  rendering, and the 100-machine truncation notice. `MobileCdk` remains unchanged.
 
 ### 7. Wrong vs Correct
 
@@ -151,4 +187,24 @@ ws.read_buffer_size(8 * 1024)
     .max_write_buffer_size(64 * 1024)
     .max_frame_size(64 * 1024)
     .max_message_size(64 * 1024)
+```
+
+#### Wrong
+
+```rust
+// Failed attempts in usage_logs are not successful bindings, and no tenant is checked.
+SELECT machine_code, COUNT(*) FROM usage_logs WHERE cdk_code = ? GROUP BY machine_code;
+```
+
+#### Correct
+
+```rust
+// First prove ownership, then aggregate committed binding history for that owner.
+SELECT machine_code FROM cdkeys WHERE id = ? AND created_by = ?;
+SELECT new_machine_code, COUNT(*)
+FROM cdk_binding_history
+WHERE cdk_id = ? AND created_by = ?
+GROUP BY new_machine_code
+ORDER BY MAX(created_at) DESC
+LIMIT 100;
 ```

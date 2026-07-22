@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '../api';
-import { useToast } from './Toast';
+import { useToast } from './toastContext';
 import type { UsageStatsData, MachineUsageDetail } from '../types';
 import OverviewCards from './OverviewCards';
 import DailyTrendChart from './DailyTrendChart';
@@ -21,7 +21,7 @@ export default function UsageStats() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, any> = { days };
+      const params: Record<string, string | number> = { days };
       if (search) params.search = search;
       const res = await api.get('/cdk/usage-stats', { params });
       if (res.data.success) {
@@ -35,7 +35,7 @@ export default function UsageStats() {
   }, [days, search]);
 
   useEffect(() => {
-    fetchData();
+    void Promise.resolve().then(fetchData);
   }, [fetchData]);
 
   const fetchDetail = useCallback(async (machineCode: string) => {

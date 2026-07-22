@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Copy, KeyRound, Loader2, LogOut, Monitor, Re
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import CopyButton from '../components/CopyButton';
-import { useToast } from '../components/Toast';
+import { useToast } from '../components/toastContext';
 import type { Cdk, CdkStatus, ValidUnit } from '../types';
 import {
   CDK_DURATION_OPTIONS,

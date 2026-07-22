@@ -128,6 +128,60 @@ pub struct ListQuery {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct BindingHistoryQuery {
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BindingHistorySummary {
+    pub current_machine_code: Option<String>,
+    pub machine_count: i64,
+    pub binding_count: i64,
+    pub rebind_count: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BindingMachineSummary {
+    pub machine_code: String,
+    pub binding_count: i64,
+    pub first_bound_at: chrono::NaiveDateTime,
+    pub last_bound_at: chrono::NaiveDateTime,
+    pub is_current: bool,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct BindingMachineRow {
+    pub machine_code: String,
+    pub binding_count: i64,
+    pub first_bound_at: chrono::NaiveDateTime,
+    pub last_bound_at: chrono::NaiveDateTime,
+}
+
+impl BindingMachineRow {
+    pub fn into_summary(self, current_machine_code: Option<&str>) -> BindingMachineSummary {
+        let is_current = current_machine_code == Some(self.machine_code.as_str());
+        BindingMachineSummary {
+            machine_code: self.machine_code,
+            binding_count: self.binding_count,
+            first_bound_at: self.first_bound_at,
+            last_bound_at: self.last_bound_at,
+            is_current,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct BindingHistoryEvent {
+    pub id: i64,
+    pub event_type: String,
+    pub old_machine_code: Option<String>,
+    pub new_machine_code: String,
+    pub client_ip: Option<String>,
+    pub created_at: chrono::NaiveDateTime,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct ExportQuery {
     pub status: Option<String>,
     pub date_from: Option<String>,

@@ -17,7 +17,7 @@ import type {
   SkinforgeRelease,
 } from '../types';
 import { formatDate } from '../utils/format';
-import { useToast } from './Toast';
+import { useToast } from './toastContext';
 
 export default function SkinforgeManager() {
   const { toast } = useToast();

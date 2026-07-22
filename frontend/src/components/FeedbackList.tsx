@@ -15,7 +15,7 @@ import {
 import api from '../api';
 import type { FeedbackListResponse, UserFeedback } from '../types';
 import { formatDate } from '../utils/format';
-import { useToast } from './Toast';
+import { useToast } from './toastContext';
 
 const typeFilters = [
   { value: '', label: '全部类型' },

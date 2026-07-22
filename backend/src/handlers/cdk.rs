@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::{Extension, Json};
 use chrono::Utc;
@@ -10,6 +10,10 @@ use crate::errors::AppError;
 use crate::middleware::auth::Claims;
 use crate::models::cdk::*;
 use crate::AppState;
+
+const BINDING_HISTORY_DEFAULT_PAGE_SIZE: u32 = 50;
+const BINDING_HISTORY_MAX_PAGE_SIZE: u32 = 100;
+const BINDING_HISTORY_MAX_MACHINE_SUMMARIES: u32 = 100;
 
 pub async fn usage_stats(
     State(state): State<AppState>,
@@ -360,6 +364,98 @@ pub async fn list(
             "total": total.0,
             "page": page,
             "page_size": page_size,
+        },
+    })))
+}
+
+fn binding_history_pagination(params: BindingHistoryQuery) -> (u32, u32, u64) {
+    let page = params.page.unwrap_or(1).max(1);
+    let page_size = params
+        .page_size
+        .unwrap_or(BINDING_HISTORY_DEFAULT_PAGE_SIZE)
+        .clamp(1, BINDING_HISTORY_MAX_PAGE_SIZE);
+    let offset = u64::from(page.saturating_sub(1)) * u64::from(page_size);
+    (page, page_size, offset)
+}
+
+pub async fn binding_history(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(cdk_id): Path<i64>,
+    Query(params): Query<BindingHistoryQuery>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+
+    let cdk: (Option<String>,) =
+        sqlx::query_as("SELECT machine_code FROM cdkeys WHERE id = ? AND created_by = ?")
+            .bind(cdk_id)
+            .bind(user_id.0)
+            .fetch_optional(&state.db)
+            .await?
+            .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
+
+    let (page, page_size, offset) = binding_history_pagination(params);
+    let counts: (i64, i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*), COUNT(DISTINCT new_machine_code), \
+         COUNT(CASE WHEN event_type = 'rebind' THEN 1 END) \
+         FROM cdk_binding_history WHERE cdk_id = ? AND created_by = ?",
+    )
+    .bind(cdk_id)
+    .bind(user_id.0)
+    .fetch_one(&state.db)
+    .await?;
+
+    let machine_rows: Vec<BindingMachineRow> = sqlx::query_as(
+        "SELECT new_machine_code AS machine_code, COUNT(*) AS binding_count, \
+         MIN(created_at) AS first_bound_at, MAX(created_at) AS last_bound_at \
+         FROM cdk_binding_history WHERE cdk_id = ? AND created_by = ? \
+         GROUP BY new_machine_code \
+         ORDER BY MAX(created_at) DESC, new_machine_code ASC LIMIT ?",
+    )
+    .bind(cdk_id)
+    .bind(user_id.0)
+    .bind(BINDING_HISTORY_MAX_MACHINE_SUMMARIES)
+    .fetch_all(&state.db)
+    .await?;
+
+    let machines: Vec<BindingMachineSummary> = machine_rows
+        .into_iter()
+        .map(|row| row.into_summary(cdk.0.as_deref()))
+        .collect();
+
+    let events: Vec<BindingHistoryEvent> = sqlx::query_as(
+        "SELECT id, event_type, old_machine_code, new_machine_code, client_ip, created_at \
+         FROM cdk_binding_history WHERE cdk_id = ? AND created_by = ? \
+         ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+    )
+    .bind(cdk_id)
+    .bind(user_id.0)
+    .bind(page_size)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await?;
+
+    let summary = BindingHistorySummary {
+        current_machine_code: cdk.0,
+        machine_count: counts.1,
+        binding_count: counts.0,
+        rebind_count: counts.2,
+    };
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "summary": summary,
+            "machines": machines,
+            "events": events,
+            "pagination": {
+                "total": counts.0,
+                "page": page,
+                "page_size": page_size,
+            },
         },
     })))
 }
@@ -1049,5 +1145,53 @@ mod tests {
 
         headers.insert("x-real-ip", "203.0.113.8, 10.0.0.1".parse().unwrap());
         assert_eq!(trusted_client_ip(&headers), None);
+    }
+
+    #[test]
+    fn binding_history_pagination_is_bounded() {
+        assert_eq!(
+            binding_history_pagination(BindingHistoryQuery {
+                page: None,
+                page_size: None,
+            }),
+            (1, 50, 0)
+        );
+        assert_eq!(
+            binding_history_pagination(BindingHistoryQuery {
+                page: Some(0),
+                page_size: Some(0),
+            }),
+            (1, 1, 0)
+        );
+        assert_eq!(
+            binding_history_pagination(BindingHistoryQuery {
+                page: Some(3),
+                page_size: Some(500),
+            }),
+            (3, 100, 200)
+        );
+    }
+
+    #[test]
+    fn binding_machine_summary_marks_only_the_current_machine() {
+        let now = Utc::now().naive_utc();
+        let current = BindingMachineRow {
+            machine_code: "MACHINE-B".to_string(),
+            binding_count: 2,
+            first_bound_at: now,
+            last_bound_at: now,
+        }
+        .into_summary(Some("MACHINE-B"));
+        let previous = BindingMachineRow {
+            machine_code: "MACHINE-A".to_string(),
+            binding_count: 1,
+            first_bound_at: now,
+            last_bound_at: now,
+        }
+        .into_summary(Some("MACHINE-B"));
+
+        assert!(current.is_current);
+        assert_eq!(current.binding_count, 2);
+        assert!(!previous.is_current);
     }
 }

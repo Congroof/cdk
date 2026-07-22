@@ -2,9 +2,9 @@
 
 ## 当前实现状态（2026-07-21）
 
-已完成：服务端绑定历史三处 schema、原子 activate/rebind、IP 记录、内存注册表、WS 认证/心跳/边界、Nginx 配置与 API 文档；SkinForge Rust 授权运行态、60 秒 grace、抖动退避、HTTP 复验、明确换绑立即撤权、本地 CDK 删除、安全点检查、AutoChampSelect/生成/应用保护、React snapshot/event 门禁与固定提示；两仓库规格已同步。
+已完成：服务端绑定历史三处 schema、原子 activate/rebind、IP 记录、内存注册表、WS 认证/心跳/边界、Nginx 配置与 API 文档；桌面管理后台 CDK 绑定详情、成功绑定次数聚合、设备汇总、换绑时间线、IP 审计与有界分页；SkinForge Rust 授权运行态、60 秒 grace、抖动退避、HTTP 复验、明确换绑立即撤权、本地 CDK 删除、安全点检查、AutoChampSelect/生成/应用保护、React snapshot/event 门禁与固定提示；两仓库规格已同步。
 
-本地验证已完成：cdk-server `cargo fmt --check`、`cargo check`、18 项测试、默认 `cargo clippy`；SkinForge `cargo fmt --check`、`cargo check`、132 项测试、TypeScript/Vite 生产构建、两仓库 `git diff --check`。cdk-server 严格 `clippy -D warnings` 仍被 4 个既有 baseline warning 阻塞（两个未使用结构、两个旧 `manual_clamp`）。
+本地验证已完成：cdk-server `cargo fmt --check`、`cargo check`、20 项测试、默认 `cargo clippy`；cdk-server 管理前端全量 ESLint、TypeScript/Vite 生产构建；SkinForge `cargo fmt --check`、`cargo check`、132 项测试、TypeScript/Vite 生产构建、两仓库 `git diff --check`。cdk-server 严格 `clippy -D warnings` 仍被 4 个既有 baseline warning 阻塞（两个未使用结构、两个旧 `manual_clamp`）。
 
 仍需在部署环境完成：MySQL 事务/并发集成测试、Nginx `nginx -t` 和实际 101 Upgrade、A -> B 端到端换绑、59/60 秒断网边界、600 连接/15 分钟 RSS 容量测试。当前机器无本地 nginx，Docker 也无缓存 nginx 镜像，因此未伪造这些结果。
 
@@ -70,6 +70,17 @@
 - [ ] 离线换绑：A 离线，B 换绑，A 下次启动/连接立即锁定。
 - [ ] 并发换绑：A -> B/C 并发，检查最终 DB、history 顺序、响应与定向事件一致。
 - [ ] 用同一合法绑定建立 600 个空闲连接，保持至少 15 分钟，记录 cdk-server RSS、容器总内存、心跳稳定性和清理后的连接数；不得出现持续无界增长。
+
+## 阶段 H：桌面后台绑定历史可视化
+
+- [x] 增加绑定历史查询 DTO 与 `GET /api/cdk/{cdk_id}/binding-history` handler；按 JWT 租户校验 CDK 所有权。
+- [x] 基于 `cdk_binding_history` 计算当前机器、历史机器数、成功绑定总次数、换绑次数和按机器聚合统计。
+- [x] 时间线使用 `created_at DESC, id DESC` 稳定分页，默认 50、最大 100；空历史返回成功空结构。
+- [x] 更新 `API.md`，记录管理端请求、响应、统计口径、分页和租户隔离。
+- [x] 增加前端绑定历史 DTO、API 调用与 `CdkBindingHistoryModal`。
+- [x] 在桌面 `CDKTable` 操作区增加“绑定详情”，实现汇总卡、设备表、事件时间线、空态、加载态和翻页。
+- [x] 保持 `MobileCdk` 不变；回归 CDK 列表搜索、分页、编辑有效期与禁用交互。
+- [x] 后端验证 `cargo fmt --check`、`cargo check`、`cargo test`、`cargo clippy`；前端验证 lint、类型检查/生产构建和 `git diff --check`。
 
 ## 风险点与回滚点
 

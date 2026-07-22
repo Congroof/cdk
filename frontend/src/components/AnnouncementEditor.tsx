@@ -4,7 +4,7 @@ import { Megaphone, RefreshCw, Save } from 'lucide-react';
 import api from '../api';
 import type { Announcement } from '../types';
 import { formatDate } from '../utils/format';
-import { useToast } from './Toast';
+import { useToast } from './toastContext';
 
 const MAX_TITLE_LEN = 128;
 const MAX_CONTENT_LEN = 10_000;

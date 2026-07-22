@@ -28,7 +28,7 @@ const [search, setSearch] = useState('');
 Only for cross-cutting concerns. Currently only **Toast** uses Context:
 
 ```tsx
-// Toast.tsx exports ToastProvider + useToast
+// Toast.tsx exports ToastProvider; toastContext.ts exports useToast + context.
 <ToastProvider>
   <App />
 </ToastProvider>

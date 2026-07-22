@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Ban, ChevronLeft, ChevronRight, Clock, Pencil } from 'lucide-react';
+import axios from 'axios';
+import { Ban, ChevronLeft, ChevronRight, Clock, History, Pencil } from 'lucide-react';
 import type { Cdk, CdkStatus } from '../types';
 import api from '../api';
-import { useToast } from './Toast';
+import { useToast } from './toastContext';
 import { formatDate } from '../utils/format';
 import CopyButton from './CopyButton';
+import CdkBindingHistoryModal from './CdkBindingHistoryModal';
 import EditValidityModal from './EditValidityModal';
 
 const statusConfig: Record<CdkStatus, { label: string; className: string }> = {
@@ -47,6 +49,7 @@ export default function CDKTable({
   const [disabling, setDisabling] = useState<number | null>(null);
   const [confirmCode, setConfirmCode] = useState<string | null>(null);
   const [editingCdk, setEditingCdk] = useState<Cdk | null>(null);
+  const [viewingHistory, setViewingHistory] = useState<Cdk | null>(null);
 
   const totalPages = Math.ceil(total / pageSize);
 
@@ -61,8 +64,11 @@ export default function CDKTable({
       await api.post('/cdk/disable', { code: confirmCode });
       toast('CDK 已禁用', 'success');
       onRefresh();
-    } catch (err: any) {
-      toast(err.response?.data?.error || '禁用失败', 'error');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && typeof err.response?.data?.error === 'string'
+        ? err.response.data.error
+        : '禁用失败';
+      toast(message, 'error');
     } finally {
       setDisabling(null);
       setConfirmCode(null);
@@ -155,6 +161,13 @@ export default function CDKTable({
                     <td className="px-4 py-3 text-slate-400">{formatDate(item.expires_at)}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="inline-flex items-center gap-2">
+                        <button
+                          onClick={() => setViewingHistory(item)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-sky-400 hover:text-sky-300 bg-sky-500/5 hover:bg-sky-500/10 border border-sky-500/10 rounded-lg transition-all"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                          绑定详情
+                        </button>
                         {item.status === 'unused' && (
                           <button
                             onClick={() => setEditingCdk(item)}
@@ -249,6 +262,14 @@ export default function CDKTable({
         onClose={() => setEditingCdk(null)}
         onSaved={onRefresh}
       />
+
+      {viewingHistory && (
+        <CdkBindingHistoryModal
+          key={viewingHistory.id}
+          cdk={viewingHistory}
+          onClose={() => setViewingHistory(null)}
+        />
+      )}
     </div>
   );
 }

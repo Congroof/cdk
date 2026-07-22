@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { IconName } from 'lucide-react';
 import type { TypeName } from '../types';
 import api from '../api';
-import { useToast } from './Toast';
+import { useToast } from './toastContext';
 
 interface Props {
   // typed props
@@ -106,9 +106,13 @@ Modal pattern used in the project:
 
 ## Toast Notifications
 
-Use the `useToast` hook from `Toast.tsx`:
+Use the `useToast` hook from `toastContext.ts`; `Toast.tsx` exports only the
+`ToastProvider` component so React Fast Refresh does not reject mixed component
+and hook exports:
 
 ```tsx
+import { useToast } from './toastContext';
+
 const { toast } = useToast();
 toast('操作成功', 'success');
 toast('操作失败', 'error');

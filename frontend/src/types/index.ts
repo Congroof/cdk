@@ -21,6 +21,41 @@ export interface CdkListResponse {
   page_size: number;
 }
 
+export interface CdkBindingHistorySummary {
+  current_machine_code: string | null;
+  machine_count: number;
+  binding_count: number;
+  rebind_count: number;
+}
+
+export interface CdkBindingMachineSummary {
+  machine_code: string;
+  binding_count: number;
+  first_bound_at: string;
+  last_bound_at: string;
+  is_current: boolean;
+}
+
+export interface CdkBindingHistoryEvent {
+  id: number;
+  event_type: 'activate' | 'rebind';
+  old_machine_code: string | null;
+  new_machine_code: string;
+  client_ip: string | null;
+  created_at: string;
+}
+
+export interface CdkBindingHistoryData {
+  summary: CdkBindingHistorySummary;
+  machines: CdkBindingMachineSummary[];
+  events: CdkBindingHistoryEvent[];
+  pagination: {
+    total: number;
+    page: number;
+    page_size: number;
+  };
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;

@@ -8,7 +8,7 @@
 
 The project does **not** have a dedicated hooks directory. Hooks are either:
 1. Built-in React hooks used directly in components (`useState`, `useCallback`, `useEffect`)
-2. A context-based hook exported from a component file (`useToast` from `Toast.tsx`)
+2. A context-based hook exported from a dedicated context module (`useToast` from `toastContext.ts`)
 
 ---
 
@@ -17,16 +17,19 @@ The project does **not** have a dedicated hooks directory. Hooks are either:
 The `useToast` hook demonstrates the project's custom hook pattern:
 
 ```tsx
-// In Toast.tsx
+// In toastContext.ts
 interface ToastContextValue {
   toast: (message: string, type?: ToastType) => void;
 }
 
-const ToastContext = createContext<ToastContextValue>({ toast: () => {} });
+export const ToastContext = createContext<ToastContextValue>({ toast: () => {} });
 
 export function useToast() {
   return useContext(ToastContext);
 }
+
+// In Toast.tsx: component exports stay separate for React Fast Refresh.
+import { ToastContext } from './toastContext';
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   // ... provider implementation
@@ -36,7 +39,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 Usage in consuming components:
 
 ```tsx
-import { useToast } from './Toast';
+import { useToast } from './toastContext';
 
 export default function MyComponent() {
   const { toast } = useToast();
@@ -66,7 +69,7 @@ const fetchData = useCallback(async () => {
 }, [param1, param2]);
 
 useEffect(() => {
-  fetchData();
+  void Promise.resolve().then(fetchData);
 }, [fetchData]);
 ```
 
@@ -75,8 +78,11 @@ useEffect(() => {
 ## Conventions
 
 - No external data-fetching library (no React Query, no SWR)
-- No custom hook files — hooks live in the component that defines them
-- If a hook needs to be shared, export it from the component file that provides the context
+- No generic `hooks/` directory. Context-backed hooks live beside their provider
+  in a dedicated `*Context.ts` module when Fast Refresh requires component-only
+  exports from the `.tsx` provider file.
+- If a context hook needs to be shared, export it from the adjacent `*Context.ts`
+  module and keep the provider component in its `.tsx` file.
 - `useCallback` for any function passed to child components or used in `useEffect` deps
 - `useEffect` only for data fetching on mount/dependency change
 

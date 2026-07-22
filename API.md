@@ -83,6 +83,7 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 26 | GET | `/api/client/skinforge/update/{target}/{arch}/{current_version}` | 否 | Tauri 动态更新 |
 | 27 | GET | `/api/client/skinforge/hash` | 否 | 获取 Hash OSS 下载元数据 |
 | 28 | GET (WebSocket) | `/api/client/u/{username}/cdk-events` | CDK + HWID Header | 监听当前绑定的换绑失效事件 |
+| 29 | GET | `/api/cdk/{cdk_id}/binding-history` | 是 | 查询单个 CDK 的成功绑定历史与机器汇总 |
 
 > `/api/client/*` 和 `/api/cdk/validate|activate` 使用相同的处理逻辑，区别仅在于是否需要 JWT 认证。
 
@@ -273,6 +274,90 @@ curl -X GET "http://localhost/api/cdk/list?search=A1B2C&page=1&page_size=10" \
     "page_size": 20
   }
 }
+```
+
+### `GET /api/cdk/{cdk_id}/binding-history`
+
+查询当前管理员拥有的单个 CDK 的成功绑定历史。统计以
+`cdk_binding_history` 为准，只包含事务提交成功的首次激活和换绑；失败尝试、
+定时校验及普通验证请求不计入“成功绑定次数”。
+
+**请求头**：`Authorization: Bearer <token>`
+
+**路径参数**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| cdk_id | number | `/api/cdk/list` 返回的 CDK 数值 ID |
+
+**Query 参数**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| page | number | 否 | 时间线页码，默认 1，最小值 1 |
+| page_size | number | 否 | 每页时间线条数，默认 50，范围 1-100 |
+
+**调用示例**：
+
+```bash
+curl -X GET "http://localhost/api/cdk/42/binding-history?page=1&page_size=20" \
+  -H "Authorization: Bearer eyJhbGci..."
+```
+
+**成功响应**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "summary": {
+      "current_machine_code": "MACHINE-A",
+      "machine_count": 2,
+      "binding_count": 3,
+      "rebind_count": 2
+    },
+    "machines": [
+      {
+        "machine_code": "MACHINE-A",
+        "binding_count": 2,
+        "first_bound_at": "2026-07-20T10:00:00",
+        "last_bound_at": "2026-07-22T11:30:00",
+        "is_current": true
+      },
+      {
+        "machine_code": "MACHINE-B",
+        "binding_count": 1,
+        "first_bound_at": "2026-07-21T09:00:00",
+        "last_bound_at": "2026-07-21T09:00:00",
+        "is_current": false
+      }
+    ],
+    "events": [
+      {
+        "id": 3,
+        "event_type": "rebind",
+        "old_machine_code": "MACHINE-B",
+        "new_machine_code": "MACHINE-A",
+        "client_ip": "203.0.113.8",
+        "created_at": "2026-07-22T11:30:00"
+      }
+    ],
+    "pagination": {
+      "total": 3,
+      "page": 1,
+      "page_size": 20
+    }
+  }
+}
+```
+
+`machines` 按最近绑定时间返回最多 100 台机器；完整历史机器数量以
+`summary.machine_count` 为准。`events` 按 `created_at DESC, id DESC` 稳定分页。
+未使用或旧版迁移前没有历史的 CDK 返回空数组和零计数。接口始终按 JWT
+用户隔离租户，不属于当前用户的 CDK 统一返回：
+
+```json
+{ "success": false, "error": "CDK 不存在" }
 ```
 
 ---
