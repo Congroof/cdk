@@ -310,3 +310,36 @@ Reduced the feedback table to content and actions, moved type, related informati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: 增加同时在线设备统计
+
+**Date**: 2026-07-23
+**Task**: 增加同时在线设备统计
+**Branch**: `main`
+
+### Summary
+
+为 WebSocket 注册表增加按租户和唯一绑定键去重的在线设备统计，扩展 /api/cdk/stats，并在桌面 CDK 管理概览展示在线设备数；补充测试、API 文档和项目规格。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `72079ba` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
