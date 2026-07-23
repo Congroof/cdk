@@ -343,3 +343,36 @@ Reduced the feedback table to content and actions, moved type, related informati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: 新增多设备 CDK 概览
+
+**Date**: 2026-07-23
+**Task**: 新增多设备 CDK 概览
+**Branch**: `main`
+
+### Summary
+
+新增多设备 CDK 标签页与租户隔离的聚合接口，使用旧/新机器码并集识别跨机器使用，并为历史不完整的机器次数增加明确标识；同步 API、Trellis 规范及全量质量检查。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a5ebef6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
