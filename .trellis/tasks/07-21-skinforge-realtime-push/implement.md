@@ -82,6 +82,15 @@
 - [x] 保持 `MobileCdk` 不变；回归 CDK 列表搜索、分页、编辑有效期与禁用交互。
 - [x] 后端验证 `cargo fmt --check`、`cargo check`、`cargo test`、`cargo clippy`；前端验证 lint、类型检查/生产构建和 `git diff --check`。
 
+## 阶段 I：同时在线设备统计
+
+- [x] 为 `CdkConnectionRegistry` 增加按租户、唯一绑定键统计在线设备的快照方法。
+- [x] 增加注册表单元测试，覆盖多连接去重、不同绑定、租户隔离和清理。
+- [x] 扩展 JWT 保护的 `/api/cdk/stats` 响应，返回 `online_devices`。
+- [x] 在桌面 CDK 管理概览区域增加“在线设备”卡，保持 `MobileCdk` 不变。
+- [x] 更新 `API.md` 和 CDK WebSocket 规格中的统计口径。
+- [x] 运行后端格式、编译、测试和 lint，以及前端 ESLint、类型检查/生产构建与 `git diff --check`。
+
 ## 风险点与回滚点
 
 - 数据事务重构：保持响应 envelope/错误文案兼容；失败可先回滚共享 workflow，但不能保留非原子 rebind + push 的半方案。

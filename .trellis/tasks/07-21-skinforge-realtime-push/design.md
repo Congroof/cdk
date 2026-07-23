@@ -239,3 +239,33 @@ GET /api/cdk/{cdk_id}/binding-history?page=1&page_size=50
 - 后端单元测试覆盖分页边界、聚合映射和租户约束可测试部分；有 MySQL 时补集成断言：首次绑定、A→B→A、空历史、跨租户不可见。
 - 前端生产构建与类型检查覆盖新增 DTO/组件；人工检查长机器码、IPv4/IPv6、空 IP、空历史、加载和翻页状态。
 - 回归现有 CDK 列表、编辑有效期、禁用、搜索和移动端列表不受影响。
+
+## 9. 同时在线设备统计
+
+### 9.1 统计口径与隔离
+
+`CdkConnectionRegistry` 已按 `(owner_id, cdk_id, machine_code)` 保存连接组。
+新增租户级快照方法，只统计指定 `owner_id` 下至少含一个连接的唯一键；同一绑定多开、
+重连连接短暂重叠时仍计为一台。该指标只反映当前 Axum 实例内的 WebSocket 在线设备，
+不从 `usage_logs`、绑定历史或 CDK 激活状态推断。
+
+### 9.2 接口与前端
+
+复用现有 JWT 管理接口：
+
+```text
+GET /api/cdk/stats
+```
+
+handler 先由 JWT 用户名解析 `owner_id`，再使用该 ID 查询注册表，响应在既有 CDK 状态统计
+之外增加 `online_devices`。这样租户隔离沿用既有认证边界，不暴露机器码、CDK 或连接明细。
+
+桌面 `Dashboard` 的 CDK 概览区域增加“在线设备”卡，随既有 `fetchStats` 在页面加载和手动刷新时
+更新。`MobileCdk` 不变，本期不增加自动轮询。
+
+### 9.3 验证
+
+- 注册表单元测试覆盖同一键多连接去重、不同绑定分别计数、租户隔离和移除归零。
+- 后端格式、编译和测试通过。
+- 前端 ESLint、TypeScript/Vite 生产构建通过。
+- API 文档记录 `online_devices` 的单实例快照与去重口径。

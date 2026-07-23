@@ -366,7 +366,7 @@ curl -X GET "http://localhost/api/cdk/42/binding-history?page=1&page_size=20" \
 
 ### `GET /api/cdk/stats`
 
-获取各状态 CDK 数量的统计信息。
+获取各状态 CDK 数量和当前在线设备数的统计信息。
 
 **请求头**：`Authorization: Bearer <token>`
 
@@ -389,10 +389,16 @@ curl -X GET http://localhost/api/cdk/stats \
     "unused": 300,
     "activated": 150,
     "expired": 40,
-    "disabled": 10
+    "disabled": 10,
+    "online_devices": 86
   }
 }
 ```
+
+`online_devices` 统计当前 Axum 实例内、属于 JWT 当前用户的唯一
+`(owner_id, cdk_id, machine_code)` WebSocket 注册键。同一绑定建立多个连接只计一台；
+连接全部断开、心跳超时或换绑失效后不再计入。该值是请求时的单实例内存快照，
+不从使用日志或绑定历史推断。
 
 ---
 

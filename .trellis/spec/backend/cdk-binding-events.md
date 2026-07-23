@@ -16,6 +16,7 @@ POST /api/client/u/{username}/activate
 POST /api/client/activate
 GET  /api/client/u/{username}/cdk-events  (WebSocket)
 GET  /api/cdk/{cdk_id}/binding-history?page=1&page_size=50  (JWT admin)
+GET  /api/cdk/stats  (JWT admin)
 
 Authorization: Bearer <CDK>
 X-SkinForge-Machine: <HWID>
@@ -85,6 +86,16 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
   must label the metric `成功绑定次数` and disclose when machine rows are truncated.
 - Client IP is admin-only audit data. It may appear in the JWT-protected history
   timeline, but must not enter public client responses or WebSocket events.
+- `GET /api/cdk/stats` returns `online_devices` in addition to the persisted CDK
+  status counts. Resolve the JWT username to `owner_id`, then count the registry's
+  unique `(owner_id, cdk_id, machine_code)` keys for that owner. Never expose the
+  raw global `connection_count`: one binding may have overlapping reconnects or
+  multiple sockets, and it would also mix tenants.
+- `online_devices` is a request-time snapshot of the current Axum instance only.
+  It is not durable, does not aggregate multiple server instances, and must not be
+  inferred from `usage_logs`, binding history, or activated CDK rows. The desktop
+  CDK overview refreshes it on page load and manual refresh; `MobileCdk` does not
+  consume it.
 
 ### 4. Validation & Error Matrix
 
@@ -104,6 +115,9 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 | history page is 0 / page size is 0 | clamp both to 1 |
 | history page size exceeds 100 | clamp to 100 |
 | CDK exists but has no history rows | success with zero counts and empty arrays |
+| tenant has no registered WebSocket keys | `online_devices = 0` |
+| one binding has multiple registered connections | `online_devices` counts it once |
+| other tenants have registered connections | exclude them from the current JWT user's count |
 
 ### 5. Good / Base / Bad Cases
 
@@ -127,6 +141,12 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
   another tenant's machine codes and client IPs.
 - Bad: counting `usage_logs` labels failed guesses and periodic validation calls
   as successful CDK usage.
+- Good: two connections under one `(owner, cdk, machine)` key plus one other key
+  for that owner produce `online_devices = 2`.
+- Base: after the last connection for a key is removed, the next stats snapshot
+  no longer counts that key.
+- Bad: returning global `connection_count` overcounts reconnects and leaks
+  cross-tenant operational data.
 
 ### 6. Tests Required
 
@@ -152,6 +172,12 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 - Frontend checks: exact snake_case DTO fields, current-machine badge, successful
   binding count label, empty/error/loading states, event paging, long HWID/IP
   rendering, and the 100-machine truncation notice. `MobileCdk` remains unchanged.
+- Registry online-count unit test: same key with two connections counts once,
+  different keys for one owner count separately, another owner is excluded, and
+  removing the final connection drops the key from the count.
+- Stats/UI checks: `online_devices` is present in the JWT-protected response and
+  the desktop CDK overview renders it; frontend lint/type-check/build pass without
+  adding a `MobileCdk` consumer.
 
 ### 7. Wrong vs Correct
 
@@ -207,4 +233,19 @@ WHERE cdk_id = ? AND created_by = ?
 GROUP BY new_machine_code
 ORDER BY MAX(created_at) DESC
 LIMIT 100;
+```
+
+#### Wrong
+
+```rust
+// Raw sockets overcount reconnects and include every tenant.
+let online_devices = registry.connection_count();
+```
+
+#### Correct
+
+```rust
+// The protected stats handler has already resolved the JWT tenant.
+let online_devices = registry.online_device_count(owner_id);
+// Registry implementation counts matching unique connection-map keys.
 ```

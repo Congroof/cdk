@@ -147,6 +147,19 @@ impl CdkConnectionRegistry {
             .map(|state| state.connection_count)
             .unwrap_or_default()
     }
+
+    pub fn online_device_count(&self, owner_id: i64) -> usize {
+        self.state
+            .lock()
+            .map(|state| {
+                state
+                    .connections
+                    .keys()
+                    .filter(|key| key.owner_id == owner_id)
+                    .count()
+            })
+            .unwrap_or_default()
+    }
 }
 
 #[cfg(test)]
@@ -185,6 +198,45 @@ mod tests {
         registry.remove(&key, registration.connection_id);
 
         assert_eq!(registry.connection_count(), 0);
+    }
+
+    #[test]
+    fn online_devices_are_deduplicated_and_tenant_scoped() {
+        let registry = CdkConnectionRegistry::new();
+        let shared_key = CdkConnectionKey::new(1, 7, "MACHINE-A");
+        let first = registry
+            .register(shared_key.clone())
+            .expect("first connection");
+        let second = registry
+            .register(shared_key.clone())
+            .expect("second connection");
+        let other_binding = registry
+            .register(CdkConnectionKey::new(1, 8, "MACHINE-B"))
+            .expect("other binding");
+        let other_tenant = registry
+            .register(CdkConnectionKey::new(2, 9, "MACHINE-C"))
+            .expect("other tenant");
+
+        assert_eq!(registry.connection_count(), 4);
+        assert_eq!(registry.online_device_count(1), 2);
+        assert_eq!(registry.online_device_count(2), 1);
+        assert_eq!(registry.online_device_count(3), 0);
+
+        registry.remove(&shared_key, first.connection_id);
+        assert_eq!(registry.online_device_count(1), 2);
+        registry.remove(&shared_key, second.connection_id);
+        assert_eq!(registry.online_device_count(1), 1);
+
+        registry.remove(
+            &CdkConnectionKey::new(1, 8, "MACHINE-B"),
+            other_binding.connection_id,
+        );
+        registry.remove(
+            &CdkConnectionKey::new(2, 9, "MACHINE-C"),
+            other_tenant.connection_id,
+        );
+        assert_eq!(registry.online_device_count(1), 0);
+        assert_eq!(registry.online_device_count(2), 0);
     }
 
     #[test]

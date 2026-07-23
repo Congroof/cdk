@@ -934,9 +934,18 @@ pub async fn stats(
         }
     }
 
+    let online_devices = state.cdk_connections.online_device_count(user_id.0);
+
     Ok(Json(serde_json::json!({
         "success": true,
-        "data": { "total": total, "unused": unused, "activated": activated, "expired": expired, "disabled": disabled },
+        "data": {
+            "total": total,
+            "unused": unused,
+            "activated": activated,
+            "expired": expired,
+            "disabled": disabled,
+            "online_devices": online_devices,
+        },
     })))
 }
 

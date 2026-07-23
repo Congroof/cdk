@@ -40,6 +40,7 @@ interface Stats {
   activated: number;
   expired: number;
   disabled: number;
+  online_devices: number;
 }
 
 export default function Dashboard() {
@@ -54,7 +55,14 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showExport, setShowExport] = useState(false);
-  const [stats, setStats] = useState<Stats>({ total: 0, unused: 0, activated: 0, expired: 0, disabled: 0 });
+  const [stats, setStats] = useState<Stats>({
+    total: 0,
+    unused: 0,
+    activated: 0,
+    expired: 0,
+    disabled: 0,
+    online_devices: 0,
+  });
 
   const fetchStats = useCallback(async () => {
     try {
@@ -181,12 +189,13 @@ export default function Dashboard() {
       {activeTab === 'cdk' ? (
         <>
           {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
             {[
               { label: '总数', value: stats.total, color: 'from-blue-500 to-blue-600' },
               { label: '未使用', value: stats.unused, color: 'from-cyan-500 to-cyan-600' },
               { label: '已激活', value: stats.activated, color: 'from-emerald-500 to-emerald-600' },
               { label: '已禁用', value: stats.disabled, color: 'from-red-500 to-red-600' },
+              { label: '在线设备', value: stats.online_devices, color: 'from-violet-500 to-fuchsia-600' },
             ].map((s) => (
               <div
                 key={s.label}
