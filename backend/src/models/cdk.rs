@@ -133,6 +133,52 @@ pub struct BindingHistoryQuery {
     pub page_size: Option<u32>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct MultiDeviceBindingsQuery {
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+    pub search: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MultiDeviceCdk {
+    pub id: i64,
+    pub code: String,
+    pub status: CdkStatus,
+    pub current_machine_code: Option<String>,
+    pub machine_count: i64,
+    pub binding_count: i64,
+    pub rebind_count: i64,
+    pub last_bound_at: chrono::NaiveDateTime,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct MultiDeviceCdkRow {
+    pub id: i64,
+    pub code: String,
+    pub status: String,
+    pub current_machine_code: Option<String>,
+    pub machine_count: i64,
+    pub binding_count: i64,
+    pub rebind_count: i64,
+    pub last_bound_at: chrono::NaiveDateTime,
+}
+
+impl From<MultiDeviceCdkRow> for MultiDeviceCdk {
+    fn from(row: MultiDeviceCdkRow) -> Self {
+        Self {
+            id: row.id,
+            code: row.code,
+            status: CdkStatus::from_str(&row.status),
+            current_machine_code: row.current_machine_code,
+            machine_count: row.machine_count,
+            binding_count: row.binding_count,
+            rebind_count: row.rebind_count,
+            last_bound_at: row.last_bound_at,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct BindingHistorySummary {
     pub current_machine_code: Option<String>,
@@ -145,6 +191,7 @@ pub struct BindingHistorySummary {
 pub struct BindingMachineSummary {
     pub machine_code: String,
     pub binding_count: i64,
+    pub binding_count_complete: bool,
     pub first_bound_at: chrono::NaiveDateTime,
     pub last_bound_at: chrono::NaiveDateTime,
     pub is_current: bool,
@@ -156,14 +203,22 @@ pub struct BindingMachineRow {
     pub binding_count: i64,
     pub first_bound_at: chrono::NaiveDateTime,
     pub last_bound_at: chrono::NaiveDateTime,
+    pub first_new_id: Option<i64>,
+    pub first_old_id: Option<i64>,
 }
 
 impl BindingMachineRow {
     pub fn into_summary(self, current_machine_code: Option<&str>) -> BindingMachineSummary {
         let is_current = current_machine_code == Some(self.machine_code.as_str());
+        let binding_count_complete = match (self.first_new_id, self.first_old_id) {
+            (Some(first_new_id), Some(first_old_id)) => first_new_id < first_old_id,
+            (Some(_), None) => true,
+            (None, _) => false,
+        };
         BindingMachineSummary {
             machine_code: self.machine_code,
             binding_count: self.binding_count,
+            binding_count_complete,
             first_bound_at: self.first_bound_at,
             last_bound_at: self.last_bound_at,
             is_current,

@@ -31,6 +31,7 @@ export interface CdkBindingHistorySummary {
 export interface CdkBindingMachineSummary {
   machine_code: string;
   binding_count: number;
+  binding_count_complete: boolean;
   first_bound_at: string;
   last_bound_at: string;
   is_current: boolean;
@@ -49,6 +50,26 @@ export interface CdkBindingHistoryData {
   summary: CdkBindingHistorySummary;
   machines: CdkBindingMachineSummary[];
   events: CdkBindingHistoryEvent[];
+  pagination: {
+    total: number;
+    page: number;
+    page_size: number;
+  };
+}
+
+export interface MultiDeviceCdk {
+  id: number;
+  code: string;
+  status: CdkStatus;
+  current_machine_code: string | null;
+  machine_count: number;
+  binding_count: number;
+  rebind_count: number;
+  last_bound_at: string;
+}
+
+export interface MultiDeviceCdkListData {
+  items: MultiDeviceCdk[];
   pagination: {
     total: number;
     page: number;

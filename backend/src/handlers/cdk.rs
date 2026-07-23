@@ -14,6 +14,9 @@ use crate::AppState;
 const BINDING_HISTORY_DEFAULT_PAGE_SIZE: u32 = 50;
 const BINDING_HISTORY_MAX_PAGE_SIZE: u32 = 100;
 const BINDING_HISTORY_MAX_MACHINE_SUMMARIES: u32 = 100;
+const MULTI_DEVICE_DEFAULT_PAGE_SIZE: u32 = 20;
+const MULTI_DEVICE_MAX_PAGE_SIZE: u32 = 100;
+const MULTI_DEVICE_MAX_SEARCH_LENGTH: usize = 256;
 
 pub async fn usage_stats(
     State(state): State<AppState>,
@@ -378,6 +381,137 @@ fn binding_history_pagination(params: BindingHistoryQuery) -> (u32, u32, u64) {
     (page, page_size, offset)
 }
 
+fn multi_device_pagination(params: &MultiDeviceBindingsQuery) -> (u32, u32, u64) {
+    let page = params.page.unwrap_or(1).max(1);
+    let page_size = params
+        .page_size
+        .unwrap_or(MULTI_DEVICE_DEFAULT_PAGE_SIZE)
+        .clamp(1, MULTI_DEVICE_MAX_PAGE_SIZE);
+    let offset = u64::from(page.saturating_sub(1)) * u64::from(page_size);
+    (page, page_size, offset)
+}
+
+fn multi_device_base_sql(select_clause: &str, has_search: bool) -> String {
+    let search_clause = if has_search {
+        " AND (c.code LIKE ? OR c.machine_code LIKE ? OR EXISTS (\
+             SELECT 1 FROM cdk_binding_history search_history \
+             WHERE search_history.cdk_id = c.id AND search_history.created_by = ? \
+             AND (search_history.old_machine_code LIKE ? \
+                  OR search_history.new_machine_code LIKE ?)))"
+    } else {
+        ""
+    };
+
+    format!(
+        "{select_clause} \
+         FROM cdkeys c \
+         INNER JOIN (\
+             SELECT created_by, cdk_id, COUNT(DISTINCT machine_code) AS machine_count \
+             FROM (\
+                 SELECT created_by, cdk_id, new_machine_code AS machine_code \
+                 FROM cdk_binding_history WHERE created_by = ? \
+                 UNION ALL \
+                 SELECT created_by, cdk_id, old_machine_code AS machine_code \
+                 FROM cdk_binding_history \
+                 WHERE created_by = ? AND old_machine_code IS NOT NULL\
+             ) all_machines \
+             GROUP BY created_by, cdk_id \
+             HAVING COUNT(DISTINCT machine_code) >= 2\
+         ) device_stats ON device_stats.cdk_id = c.id \
+             AND device_stats.created_by = c.created_by \
+         INNER JOIN (\
+             SELECT created_by, cdk_id, COUNT(*) AS binding_count, \
+                 COUNT(CASE WHEN event_type = 'rebind' THEN 1 END) AS rebind_count, \
+                 MAX(created_at) AS last_bound_at \
+             FROM cdk_binding_history WHERE created_by = ? \
+             GROUP BY created_by, cdk_id\
+         ) history_stats ON history_stats.cdk_id = c.id \
+             AND history_stats.created_by = c.created_by \
+         WHERE c.created_by = ?{search_clause}"
+    )
+}
+
+pub async fn multi_device_bindings(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(params): Query<MultiDeviceBindingsQuery>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
+        .bind(&claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+
+    let search = params
+        .search
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if search.is_some_and(|value| value.chars().count() > MULTI_DEVICE_MAX_SEARCH_LENGTH) {
+        return Err(AppError::BadRequest(
+            "搜索内容不能超过 256 个字符".to_string(),
+        ));
+    }
+
+    let has_search = search.is_some();
+    let search_pattern = search.map(|value| format!("%{value}%")).unwrap_or_default();
+    let (page, page_size, offset) = multi_device_pagination(&params);
+
+    macro_rules! bind_multi_device_filters {
+        ($query:expr) => {{
+            let mut query = $query
+                .bind(user_id.0)
+                .bind(user_id.0)
+                .bind(user_id.0)
+                .bind(user_id.0);
+            if has_search {
+                query = query
+                    .bind(&search_pattern)
+                    .bind(&search_pattern)
+                    .bind(user_id.0)
+                    .bind(&search_pattern)
+                    .bind(&search_pattern);
+            }
+            query
+        }};
+    }
+
+    let count_base = multi_device_base_sql("SELECT c.id", has_search);
+    let count_sql = format!("SELECT COUNT(*) FROM ({count_base}) multi_device_cdks");
+    let total: (i64,) = bind_multi_device_filters!(sqlx::query_as(&count_sql))
+        .fetch_one(&state.db)
+        .await?;
+
+    let data_base = multi_device_base_sql(
+        "SELECT c.id, c.code, c.status, \
+         c.machine_code AS current_machine_code, device_stats.machine_count, \
+         history_stats.binding_count, history_stats.rebind_count, \
+         history_stats.last_bound_at",
+        has_search,
+    );
+    let data_sql = format!(
+        "{data_base} ORDER BY history_stats.last_bound_at DESC, \
+         device_stats.machine_count DESC, c.id DESC LIMIT ? OFFSET ?"
+    );
+    let rows: Vec<MultiDeviceCdkRow> = bind_multi_device_filters!(sqlx::query_as(&data_sql))
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await?;
+    let items: Vec<MultiDeviceCdk> = rows.into_iter().map(MultiDeviceCdk::from).collect();
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "items": items,
+            "pagination": {
+                "total": total.0,
+                "page": page,
+                "page_size": page_size,
+            },
+        },
+    })))
+}
+
 pub async fn binding_history(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -398,9 +532,8 @@ pub async fn binding_history(
             .ok_or_else(|| AppError::NotFound("CDK 不存在".to_string()))?;
 
     let (page, page_size, offset) = binding_history_pagination(params);
-    let counts: (i64, i64, i64) = sqlx::query_as(
-        "SELECT COUNT(*), COUNT(DISTINCT new_machine_code), \
-         COUNT(CASE WHEN event_type = 'rebind' THEN 1 END) \
+    let counts: (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*), COUNT(CASE WHEN event_type = 'rebind' THEN 1 END) \
          FROM cdk_binding_history WHERE cdk_id = ? AND created_by = ?",
     )
     .bind(cdk_id)
@@ -408,13 +541,44 @@ pub async fn binding_history(
     .fetch_one(&state.db)
     .await?;
 
-    let machine_rows: Vec<BindingMachineRow> = sqlx::query_as(
-        "SELECT new_machine_code AS machine_code, COUNT(*) AS binding_count, \
-         MIN(created_at) AS first_bound_at, MAX(created_at) AS last_bound_at \
-         FROM cdk_binding_history WHERE cdk_id = ? AND created_by = ? \
-         GROUP BY new_machine_code \
-         ORDER BY MAX(created_at) DESC, new_machine_code ASC LIMIT ?",
+    let machine_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT machine_code) FROM (\
+             SELECT new_machine_code AS machine_code \
+             FROM cdk_binding_history WHERE cdk_id = ? AND created_by = ? \
+             UNION ALL \
+             SELECT old_machine_code AS machine_code \
+             FROM cdk_binding_history \
+             WHERE cdk_id = ? AND created_by = ? AND old_machine_code IS NOT NULL\
+         ) machine_codes",
     )
+    .bind(cdk_id)
+    .bind(user_id.0)
+    .bind(cdk_id)
+    .bind(user_id.0)
+    .fetch_one(&state.db)
+    .await?;
+
+    let machine_rows: Vec<BindingMachineRow> = sqlx::query_as(
+        "SELECT machine_code, \
+             COUNT(CASE WHEN is_new = 1 THEN 1 END) AS binding_count, \
+             MIN(recorded_at) AS first_bound_at, MAX(recorded_at) AS last_bound_at, \
+             MIN(CASE WHEN is_new = 1 THEN event_id END) AS first_new_id, \
+             MIN(CASE WHEN is_new = 0 THEN event_id END) AS first_old_id \
+         FROM (\
+             SELECT new_machine_code AS machine_code, 1 AS is_new, \
+                 id AS event_id, created_at AS recorded_at \
+             FROM cdk_binding_history WHERE cdk_id = ? AND created_by = ? \
+             UNION ALL \
+             SELECT old_machine_code AS machine_code, 0 AS is_new, \
+                 id AS event_id, created_at AS recorded_at \
+             FROM cdk_binding_history \
+             WHERE cdk_id = ? AND created_by = ? AND old_machine_code IS NOT NULL\
+         ) machine_events \
+         GROUP BY machine_code \
+         ORDER BY MAX(recorded_at) DESC, machine_code ASC LIMIT ?",
+    )
+    .bind(cdk_id)
+    .bind(user_id.0)
     .bind(cdk_id)
     .bind(user_id.0)
     .bind(BINDING_HISTORY_MAX_MACHINE_SUMMARIES)
@@ -440,9 +604,9 @@ pub async fn binding_history(
 
     let summary = BindingHistorySummary {
         current_machine_code: cdk.0,
-        machine_count: counts.1,
+        machine_count: machine_count.0,
         binding_count: counts.0,
-        rebind_count: counts.2,
+        rebind_count: counts.1,
     };
 
     Ok(Json(serde_json::json!({
@@ -1182,13 +1346,57 @@ mod tests {
     }
 
     #[test]
-    fn binding_machine_summary_marks_only_the_current_machine() {
+    fn multi_device_pagination_is_bounded() {
+        assert_eq!(
+            multi_device_pagination(&MultiDeviceBindingsQuery {
+                page: None,
+                page_size: None,
+                search: None,
+            }),
+            (1, 20, 0)
+        );
+        assert_eq!(
+            multi_device_pagination(&MultiDeviceBindingsQuery {
+                page: Some(0),
+                page_size: Some(0),
+                search: None,
+            }),
+            (1, 1, 0)
+        );
+        assert_eq!(
+            multi_device_pagination(&MultiDeviceBindingsQuery {
+                page: Some(3),
+                page_size: Some(500),
+                search: Some("MACHINE".to_string()),
+            }),
+            (3, 100, 200)
+        );
+    }
+
+    #[test]
+    fn multi_device_sql_counts_old_and_new_machines_with_stable_bindings() {
+        let without_search = multi_device_base_sql("SELECT c.id", false);
+        assert!(without_search.contains("new_machine_code AS machine_code"));
+        assert!(without_search.contains("old_machine_code AS machine_code"));
+        assert!(without_search.contains("HAVING COUNT(DISTINCT machine_code) >= 2"));
+        assert_eq!(without_search.matches('?').count(), 4);
+
+        let with_search = multi_device_base_sql("SELECT c.id", true);
+        assert!(with_search.contains("search_history.old_machine_code LIKE ?"));
+        assert!(with_search.contains("search_history.new_machine_code LIKE ?"));
+        assert_eq!(with_search.matches('?').count(), 9);
+    }
+
+    #[test]
+    fn binding_machine_summary_marks_current_machine_and_complete_counts() {
         let now = Utc::now().naive_utc();
         let current = BindingMachineRow {
             machine_code: "MACHINE-B".to_string(),
             binding_count: 2,
             first_bound_at: now,
             last_bound_at: now,
+            first_new_id: Some(2),
+            first_old_id: Some(5),
         }
         .into_summary(Some("MACHINE-B"));
         let previous = BindingMachineRow {
@@ -1196,11 +1404,41 @@ mod tests {
             binding_count: 1,
             first_bound_at: now,
             last_bound_at: now,
+            first_new_id: Some(1),
+            first_old_id: Some(2),
         }
         .into_summary(Some("MACHINE-B"));
 
         assert!(current.is_current);
         assert_eq!(current.binding_count, 2);
+        assert!(current.binding_count_complete);
         assert!(!previous.is_current);
+        assert!(previous.binding_count_complete);
+    }
+
+    #[test]
+    fn binding_machine_summary_marks_legacy_counts_incomplete() {
+        let now = Utc::now().naive_utc();
+        let old_only = BindingMachineRow {
+            machine_code: "MACHINE-A".to_string(),
+            binding_count: 0,
+            first_bound_at: now,
+            last_bound_at: now,
+            first_new_id: None,
+            first_old_id: Some(10),
+        }
+        .into_summary(None);
+        let rebound_later = BindingMachineRow {
+            machine_code: "MACHINE-B".to_string(),
+            binding_count: 1,
+            first_bound_at: now,
+            last_bound_at: now,
+            first_new_id: Some(12),
+            first_old_id: Some(11),
+        }
+        .into_summary(None);
+
+        assert!(!old_only.binding_count_complete);
+        assert!(!rebound_later.binding_count_complete);
     }
 }

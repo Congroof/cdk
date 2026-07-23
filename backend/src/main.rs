@@ -57,6 +57,10 @@ async fn main() {
         .route("/cdk/generate", post(handlers::cdk::generate))
         .route("/cdk/list", get(handlers::cdk::list))
         .route(
+            "/cdk/multi-device-bindings",
+            get(handlers::cdk::multi_device_bindings),
+        )
+        .route(
             "/cdk/{cdk_id}/binding-history",
             get(handlers::cdk::binding_history),
         )

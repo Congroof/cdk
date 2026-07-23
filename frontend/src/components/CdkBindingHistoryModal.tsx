@@ -21,7 +21,7 @@ import { useToast } from './toastContext';
 const PAGE_SIZE = 20;
 
 interface Props {
-  cdk: Cdk;
+  cdk: Pick<Cdk, 'id' | 'code'>;
   onClose: () => void;
 }
 
@@ -143,7 +143,7 @@ export default function CdkBindingHistoryModal({ cdk, onClose }: Props) {
                   <div>
                     <h4 className="text-sm font-medium text-slate-200">关联机器</h4>
                     <p className="mt-1 text-xs text-slate-500">
-                      次数仅统计成功激活和换绑，不包含校验请求或失败尝试。
+                      次数仅统计已记录的成功激活和换绑；老数据缺少首次绑定记录时会明确标记。
                     </p>
                   </div>
                 </div>
@@ -160,8 +160,8 @@ export default function CdkBindingHistoryModal({ cdk, onClose }: Props) {
                         <tr className="border-b border-white/5 bg-white/[0.02]">
                           <th className="px-4 py-2.5 text-left font-medium text-slate-400">机器码</th>
                           <th className="px-4 py-2.5 text-left font-medium text-slate-400">成功绑定次数</th>
-                          <th className="px-4 py-2.5 text-left font-medium text-slate-400">首次绑定</th>
-                          <th className="px-4 py-2.5 text-left font-medium text-slate-400">最近绑定</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-slate-400">首次记录</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-slate-400">最近记录</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -183,8 +183,16 @@ export default function CdkBindingHistoryModal({ cdk, onClose }: Props) {
                                 )}
                               </div>
                             </td>
-                            <td className="px-4 py-3 font-medium text-blue-400">
-                              {machine.binding_count}
+                            <td className="px-4 py-3">
+                              {machine.binding_count_complete ? (
+                                <span className="font-medium text-blue-400">
+                                  {machine.binding_count}
+                                </span>
+                              ) : (
+                                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-xs text-amber-300">
+                                  历史记录，次数未知
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-slate-400">
                               {formatDate(machine.first_bound_at)}

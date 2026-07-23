@@ -84,6 +84,7 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 27 | GET | `/api/client/skinforge/hash` | 否 | 获取 Hash OSS 下载元数据 |
 | 28 | GET (WebSocket) | `/api/client/u/{username}/cdk-events` | CDK + HWID Header | 监听当前绑定的换绑失效事件 |
 | 29 | GET | `/api/cdk/{cdk_id}/binding-history` | 是 | 查询单个 CDK 的成功绑定历史与机器汇总 |
+| 30 | GET | `/api/cdk/multi-device-bindings` | 是 | 分页查询成功绑定过多台机器的 CDK |
 
 > `/api/client/*` 和 `/api/cdk/validate|activate` 使用相同的处理逻辑，区别仅在于是否需要 JWT 认证。
 
@@ -320,6 +321,7 @@ curl -X GET "http://localhost/api/cdk/42/binding-history?page=1&page_size=20" \
       {
         "machine_code": "MACHINE-A",
         "binding_count": 2,
+        "binding_count_complete": true,
         "first_bound_at": "2026-07-20T10:00:00",
         "last_bound_at": "2026-07-22T11:30:00",
         "is_current": true
@@ -327,6 +329,7 @@ curl -X GET "http://localhost/api/cdk/42/binding-history?page=1&page_size=20" \
       {
         "machine_code": "MACHINE-B",
         "binding_count": 1,
+        "binding_count_complete": true,
         "first_bound_at": "2026-07-21T09:00:00",
         "last_bound_at": "2026-07-21T09:00:00",
         "is_current": false
@@ -351,7 +354,13 @@ curl -X GET "http://localhost/api/cdk/42/binding-history?page=1&page_size=20" \
 }
 ```
 
-`machines` 按最近绑定时间返回最多 100 台机器；完整历史机器数量以
+历史机器数和 `machines` 使用成功记录中非空 `old_machine_code`、`new_machine_code`
+的并集，避免历史表上线前已激活的 CDK 在第一次 `A → B` 换绑后漏掉 A。
+`binding_count` 仍只统计该机器作为成功绑定目标的记录；如果机器首次以旧机器出现，
+`binding_count_complete` 为 `false`，表示历史表上线前的次数无法还原，管理后台显示
+“历史记录，次数未知”。`first_bound_at`、`last_bound_at` 表示首次和最近出现在绑定历史的时间。
+
+`machines` 按最近记录时间返回最多 100 台机器；完整历史机器数量以
 `summary.machine_count` 为准。`events` 按 `created_at DESC, id DESC` 稳定分页。
 未使用或旧版迁移前没有历史的 CDK 返回空数组和零计数。接口始终按 JWT
 用户隔离租户，不属于当前用户的 CDK 统一返回：
@@ -359,6 +368,59 @@ curl -X GET "http://localhost/api/cdk/42/binding-history?page=1&page_size=20" \
 ```json
 { "success": false, "error": "CDK 不存在" }
 ```
+
+### `GET /api/cdk/multi-device-bindings`
+
+分页查询当前管理员拥有、且成功绑定历史涉及至少两台不同机器的 CDK。多设备判断使用
+成功记录中非空旧/新机器码的并集，不读取包含失败尝试的 `usage_logs`。
+
+**请求头**：`Authorization: Bearer <token>`
+
+**Query 参数**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| page | number | 否 | 页码，默认 1，最小值 1 |
+| page_size | number | 否 | 每页数量，默认 20，范围 1-100 |
+| search | string | 否 | 搜索 CDK、当前机器或任意历史旧/新机器码，最长 256 字符 |
+
+**调用示例**：
+
+```bash
+curl -X GET "http://localhost/api/cdk/multi-device-bindings?page=1&page_size=20&search=MACHINE-A" \
+  -H "Authorization: Bearer eyJhbGci..."
+```
+
+**成功响应**：
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": 42,
+        "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
+        "status": "activated",
+        "current_machine_code": "MACHINE-B",
+        "machine_count": 2,
+        "binding_count": 3,
+        "rebind_count": 2,
+        "last_bound_at": "2026-07-23T12:00:00"
+      }
+    ],
+    "pagination": {
+      "total": 1,
+      "page": 1,
+      "page_size": 20
+    }
+  }
+}
+```
+
+结果只包含 `machine_count >= 2` 的 CDK，按最近成功绑定时间倒序、历史机器数倒序、
+CDK ID 倒序稳定排列。列表不返回完整机器数组和时间线；需要详情时继续调用单 CDK
+绑定历史接口。所有聚合和搜索均按 JWT 当前用户的 `created_by` 隔离。
 
 ---
 

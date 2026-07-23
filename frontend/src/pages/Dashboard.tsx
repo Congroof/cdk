@@ -6,6 +6,7 @@ import {
   KeyRound,
   Megaphone,
   MessageSquare,
+  Network,
   Plus,
   RefreshCw,
   Search,
@@ -21,10 +22,11 @@ import BannedMachines from '../components/BannedMachines';
 import FeedbackList from '../components/FeedbackList';
 import AnnouncementEditor from '../components/AnnouncementEditor';
 import SkinforgeManager from '../components/SkinforgeManager';
+import MultiDeviceCdkList from '../components/MultiDeviceCdkList';
 import api from '../api';
 import type { Cdk } from '../types';
 
-type TabKey = 'cdk' | 'stats' | 'banned' | 'feedback' | 'announcement' | 'skinforge';
+type TabKey = 'cdk' | 'multiDevice' | 'stats' | 'banned' | 'feedback' | 'announcement' | 'skinforge';
 
 const statusFilters: { value: string; label: string }[] = [
   { value: '', label: '全部' },
@@ -128,6 +130,17 @@ export default function Dashboard() {
         >
           <KeyRound className="w-4 h-4" />
           CDK 管理
+        </button>
+        <button
+          onClick={() => setActiveTab('multiDevice')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+            activeTab === 'multiDevice'
+              ? 'bg-gradient-to-r from-amber-500/15 to-orange-500/15 text-amber-400 shadow-sm'
+              : 'text-slate-400 hover:text-slate-300 hover:bg-white/5'
+          }`}
+        >
+          <Network className="w-4 h-4" />
+          多设备 CDK
         </button>
         <button
           onClick={() => setActiveTab('stats')}
@@ -290,6 +303,8 @@ export default function Dashboard() {
             onClose={() => setShowExport(false)}
           />
         </>
+      ) : activeTab === 'multiDevice' ? (
+        <MultiDeviceCdkList />
       ) : activeTab === 'stats' ? (
         <UsageStats />
       ) : activeTab === 'banned' ? (
