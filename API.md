@@ -525,8 +525,9 @@ curl -X GET "http://localhost/api/cdk/export?status=activated&date_from=2026-05-
 
 ### `POST /api/cdk/validate`（需认证）
 ### `POST /api/client/validate`（无需认证）
+### `POST /api/client/u/{username}/validate`（租户客户端，无需认证）
 
-验证 CDK 是否有效。两个路径的处理逻辑完全相同。
+验证 CDK 是否有效。三个路径的处理逻辑完全相同。
 
 **请求参数**：
 
@@ -534,7 +535,7 @@ curl -X GET "http://localhost/api/cdk/export?status=activated&date_from=2026-05-
 |------|------|------|------|
 | code | string | 是 | CDK 激活码 |
 | machine_code | string | 否 | 机器码（已激活的 CDK 用于校验绑定关系） |
-| version | string | 是 | 客户端 SemVer 版本号，必须不低于 `2.5.0` |
+| version | string | 是 | 客户端 SemVer 版本号，必须不低于 `2.5.3` |
 
 **调用示例**：
 
@@ -546,7 +547,7 @@ curl -X POST http://localhost/api/cdk/validate \
   -d '{
     "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
     "machine_code": "MACHINE-001",
-    "version": "2.5.0"
+    "version": "2.5.3"
   }'
 
 # 客户端（无需 Token）
@@ -555,7 +556,7 @@ curl -X POST http://localhost/api/client/validate \
   -d '{
     "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
     "machine_code": "MACHINE-001",
-    "version": "2.5.0"
+    "version": "2.5.3"
   }'
 ```
 
@@ -588,8 +589,9 @@ curl -X POST http://localhost/api/client/validate \
 
 ### `POST /api/cdk/activate`（需认证）
 ### `POST /api/client/activate`（无需认证）
+### `POST /api/client/u/{username}/activate`（租户客户端，无需认证）
 
-激活 CDK 并绑定机器码。两个路径的处理逻辑完全相同。
+激活 CDK 并绑定机器码。管理端和通用客户端请求契约保持不变；租户客户端还必须提供版本号。
 
 **请求参数**：
 
@@ -597,6 +599,7 @@ curl -X POST http://localhost/api/client/validate \
 |------|------|------|------|
 | code | string | 是 | CDK 激活码 |
 | machine_code | string | 是 | 机器码 |
+| version | string | 租户客户端必填 | 客户端 SemVer 版本号，必须不低于 `2.5.3` |
 
 **调用示例**：
 
@@ -616,6 +619,15 @@ curl -X POST http://localhost/api/client/activate \
   -d '{
     "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
     "machine_code": "MACHINE-001"
+  }'
+
+# 租户客户端（SkinForge）
+curl -X POST http://localhost/api/client/u/a/activate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
+    "machine_code": "MACHINE-001",
+    "version": "2.5.3"
   }'
 ```
 

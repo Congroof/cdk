@@ -47,6 +47,12 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 
 ### 3. Contracts
 
+- `POST /api/client/u/{username}/validate` and
+  `POST /api/client/u/{username}/activate` both require the flat JSON fields
+  `code`, `machine_code`, and SemVer `version`. Both reject versions below the
+  shared `MIN_CLIENT_VERSION` (`2.5.3`) before any database query or activation
+  side effect. The generic `/api/client/activate` and protected
+  `/api/cdk/activate` keep their legacy `code` + `machine_code` contract.
 - `activate_for_owner` trims and bounds CDK/HWID, resolves the tenant before it
   begins the binding transaction, and trusts only a parseable `X-Real-IP` from
   the private Nginx hop.
@@ -126,6 +132,10 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 
 | Condition | Result |
 |---|---|
+| tenant validate/activate omits `version` | JSON rejection; handler and database are not reached |
+| tenant validate/activate has malformed SemVer | HTTP 400 `客户端版本号格式无效` |
+| tenant validate/activate version is below `2.5.3` | HTTP 400 `客户端版本过低，最低要求版本 2.5.3` |
+| generic/admin activate omits `version` | preserve legacy activation behavior |
 | missing/blank CDK or HWID | HTTP 400 |
 | CDK > 64 chars or HWID > 256 chars | HTTP 400 |
 | unknown tenant/binding, wrong machine, disabled/expired CDK | WebSocket 401 without detail |
@@ -154,6 +164,12 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 
 ### 5. Good / Base / Bad Cases
 
+- Good: SkinForge `2.5.3` sends the same compile-time version on validate and
+  activate, so either authorization path passes the same minimum-version gate.
+- Base: the legacy generic activation CLI omits `version` and continues to use
+  `/api/client/activate`; it is intentionally outside the SkinForge gate.
+- Bad: validating the version only in `user_validate` lets an old client call
+  `user_activate`, receive `valid`, and enter the main UI without validation.
 - Good: A is locked, updates to B, writes `A -> B`, commits, then invalidates only A.
 - Good: concurrent A -> B and B -> C requests serialize and write ordered history.
 - Good: 600 idle sockets use the explicit 8KB read buffer and fit beneath the
@@ -195,6 +211,11 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 
 ### 6. Tests Required
 
+- Version boundary unit tests: malformed, `2.5.2`, prerelease below `2.5.3`,
+  exact `2.5.3`, and a higher version.
+- Request-contract tests: tenant activation without `version` fails to
+  deserialize, while the generic `ActivateRequest` still accepts only `code`
+  and `machine_code`.
 - Protocol serialization: assert v1/type/reason and absence of credential fields.
 - Registry: targeted multi-connection invalidation, idempotent cleanup, and 3000 cap.
 - Integration race: pause between pre-upgrade validation and registry insertion,
@@ -350,4 +371,18 @@ let online_devices = registry.connection_count();
 // The protected stats handler has already resolved the JWT tenant.
 let online_devices = registry.online_device_count(owner_id);
 // Registry implementation counts matching unique connection-map keys.
+```
+
+#### Wrong
+
+```rust
+// user_activate can authorize the UI but skips the client-version gate.
+activate_for_owner(&state, owner_id, payload, client_ip).await
+```
+
+#### Correct
+
+```rust
+validate_client_version(&payload.version)?; // before tenant lookup or writes
+activate_for_owner(&state, owner_id, payload.activate, client_ip).await
 ```

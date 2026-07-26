@@ -107,6 +107,13 @@ pub struct ActivateRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct UserActivateRequest {
+    #[serde(flatten)]
+    pub activate: ActivateRequest,
+    pub version: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct DisableRequest {
     pub code: String,
 }

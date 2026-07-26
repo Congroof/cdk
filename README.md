@@ -118,7 +118,7 @@ curl -X POST http://localhost:3000/api/cdk/generate \
 curl -X POST http://localhost:3000/api/cdk/validate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
-  -d '{"code":"CDK-XXXX-XXXX-XXXX","machine_code":"optional-machine-id","version":"2.5.0"}'
+  -d '{"code":"CDK-XXXX-XXXX-XXXX","machine_code":"optional-machine-id","version":"2.5.3"}'
 ```
 
 **激活 CDK：**
