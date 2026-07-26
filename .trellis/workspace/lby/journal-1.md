@@ -409,3 +409,36 @@ Reduced the feedback table to content and actions, moved type, related informati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: 补齐 SkinForge 激活版本校验
+
+**Date**: 2026-07-26
+**Task**: 补齐 SkinForge 激活版本校验
+**Branch**: `main`
+
+### Summary
+
+服务端最低版本提升到 2.5.3，仅租户激活新增版本门禁并保持通用 CLI 兼容；SkinForge 在外部仓库提交 0c3ef14，同步 2.5.3 并在激活请求上报 CARGO_PKG_VERSION。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `93b36e3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
