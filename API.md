@@ -84,7 +84,7 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 27 | GET | `/api/client/skinforge/hash` | 否 | 获取 Hash OSS 下载元数据 |
 | 28 | GET (WebSocket) | `/api/client/u/{username}/cdk-events` | CDK + HWID Header | 监听当前绑定的换绑失效事件 |
 | 29 | GET | `/api/cdk/{cdk_id}/binding-history` | 是 | 查询单个 CDK 的成功绑定历史与机器汇总 |
-| 30 | GET | `/api/cdk/multi-device-bindings` | 是 | 分页查询成功绑定过多台机器的 CDK |
+| 30 | GET | `/api/cdk/multi-device-bindings` | 是 | 分页查询成功换绑超过 5 次的多设备 CDK |
 
 > `/api/client/*` 和 `/api/cdk/validate|activate` 使用相同的处理逻辑，区别仅在于是否需要 JWT 认证。
 
@@ -371,8 +371,10 @@ curl -X GET "http://localhost/api/cdk/42/binding-history?page=1&page_size=20" \
 
 ### `GET /api/cdk/multi-device-bindings`
 
-分页查询当前管理员拥有、且成功绑定历史涉及至少两台不同机器的 CDK。多设备判断使用
-成功记录中非空旧/新机器码的并集，不读取包含失败尝试的 `usage_logs`。
+分页查询当前管理员拥有、成功换绑次数严格大于 5、且成功绑定历史涉及至少两台不同机器的
+CDK。多设备判断使用成功记录中非空旧/新机器码的并集，换绑次数只统计
+`event_type = "rebind"` 的成功记录，不读取包含失败尝试的 `usage_logs`。查询不限制 CDK
+当前状态。
 
 **请求头**：`Authorization: Bearer <token>`
 
@@ -404,8 +406,8 @@ curl -X GET "http://localhost/api/cdk/multi-device-bindings?page=1&page_size=20&
         "status": "activated",
         "current_machine_code": "MACHINE-B",
         "machine_count": 2,
-        "binding_count": 3,
-        "rebind_count": 2,
+        "binding_count": 7,
+        "rebind_count": 6,
         "last_bound_at": "2026-07-23T12:00:00"
       }
     ],
@@ -418,9 +420,10 @@ curl -X GET "http://localhost/api/cdk/multi-device-bindings?page=1&page_size=20&
 }
 ```
 
-结果只包含 `machine_count >= 2` 的 CDK，按最近成功绑定时间倒序、历史机器数倒序、
-CDK ID 倒序稳定排列。列表不返回完整机器数组和时间线；需要详情时继续调用单 CDK
-绑定历史接口。所有聚合和搜索均按 JWT 当前用户的 `created_by` 隔离。
+结果只包含 `machine_count >= 2` 且 `rebind_count > 5` 的 CDK，按最近成功绑定时间倒序、
+历史机器数倒序、CDK ID 倒序稳定排列。5 次换绑不返回，从 6 次开始返回；当前 CDK 状态
+不参与筛选。列表不返回完整机器数组和时间线；需要详情时继续调用单 CDK 绑定历史接口。
+所有聚合和搜索均按 JWT 当前用户的 `created_by` 隔离。
 
 ---
 

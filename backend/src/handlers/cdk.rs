@@ -18,6 +18,7 @@ const BINDING_HISTORY_MAX_MACHINE_SUMMARIES: u32 = 100;
 const MULTI_DEVICE_DEFAULT_PAGE_SIZE: u32 = 20;
 const MULTI_DEVICE_MAX_PAGE_SIZE: u32 = 100;
 const MULTI_DEVICE_MAX_SEARCH_LENGTH: usize = 256;
+const MULTI_DEVICE_MIN_REBIND_COUNT: i64 = 6;
 const MIN_CLIENT_VERSION: &str = "2.5.0";
 
 fn validate_client_version(version: &str) -> Result<(), AppError> {
@@ -437,7 +438,9 @@ fn multi_device_base_sql(select_clause: &str, has_search: bool) -> String {
                  COUNT(CASE WHEN event_type = 'rebind' THEN 1 END) AS rebind_count, \
                  MAX(created_at) AS last_bound_at \
              FROM cdk_binding_history WHERE created_by = ? \
-             GROUP BY created_by, cdk_id\
+             GROUP BY created_by, cdk_id \
+             HAVING COUNT(CASE WHEN event_type = 'rebind' THEN 1 END) \
+                 >= {MULTI_DEVICE_MIN_REBIND_COUNT}\
          ) history_stats ON history_stats.cdk_id = c.id \
              AND history_stats.created_by = c.created_by \
          WHERE c.created_by = ?{search_clause}"
@@ -1409,11 +1412,13 @@ mod tests {
     }
 
     #[test]
-    fn multi_device_sql_counts_old_and_new_machines_with_stable_bindings() {
+    fn multi_device_sql_applies_machine_and_rebind_thresholds_with_stable_bindings() {
         let without_search = multi_device_base_sql("SELECT c.id", false);
         assert!(without_search.contains("new_machine_code AS machine_code"));
         assert!(without_search.contains("old_machine_code AS machine_code"));
         assert!(without_search.contains("HAVING COUNT(DISTINCT machine_code) >= 2"));
+        assert!(without_search
+            .contains("HAVING COUNT(CASE WHEN event_type = 'rebind' THEN 1 END) >= 6"));
         assert_eq!(without_search.matches('?').count(), 4);
 
         let with_search = multi_device_base_sql("SELECT c.id", true);
