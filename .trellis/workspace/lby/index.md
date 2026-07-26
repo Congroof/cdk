@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
+- **Total Sessions**: 14
 - **Last Active**: 2026-07-26
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~444 | Active |
+| `journal-1.md` | ~477 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-07-26 | 清理未使用旧版接口和 CLI | `1c600d6` | `main` |
 | 13 | 2026-07-26 | 补齐 SkinForge 激活版本校验 | `93b36e3` | `main` |
 | 12 | 2026-07-26 | 筛选高换绑次数的多设备 CDK | `89eeda3` | `main` |
 | 11 | 2026-07-23 | 新增多设备 CDK 概览 | `a5ebef6` | `main` |

@@ -442,3 +442,36 @@ Reduced the feedback table to content and actions, moved type, related informati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: 清理未使用旧版接口和 CLI
+
+**Date**: 2026-07-26
+**Task**: 清理未使用旧版接口和 CLI
+**Branch**: `main`
+
+### Summary
+
+移除未被管理后台和 SkinForge 使用的 6 个旧版接口及旧 CLI，保留历史匿名反馈数据兼容，并同步 API 文档与后端规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1c600d6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
