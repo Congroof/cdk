@@ -60,33 +60,32 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 3 | GET | `/api/cdk/list` | 是 | 分页查询 CDK 列表 |
 | 4 | GET | `/api/cdk/stats` | 是 | CDK 统计概览 |
 | 5 | GET | `/api/cdk/export` | 是 | 导出 CDK 数据（最大 10000 条） |
-| 6 | POST | `/api/cdk/validate` | 是 | 验证 CDK（管理端） |
-| 7 | POST | `/api/cdk/activate` | 是 | 激活 CDK（管理端） |
+| 6 | GET | `/api/cdk/usage-stats` | 是 | 查询 CDK 使用趋势 |
+| 7 | GET | `/api/cdk/machine-usage` | 是 | 查询机器使用详情 |
 | 8 | POST | `/api/cdk/disable` | 是 | 禁用 CDK |
 | 9 | POST | `/api/cdk/update-validity` | 是 | 修改未使用 CDK 有效期 / 延长已激活 CDK 过期时间 |
-| 10 | POST | `/api/client/validate` | 否 | 验证 CDK（客户端） |
-| 11 | POST | `/api/client/activate` | 否 | 激活 CDK（客户端） |
-| 12 | POST | `/api/client/feedback` | 否 | 提交用户反馈 |
-| 13 | POST | `/api/client/u/{username}/feedback` | 否 | 提交指定用户归属的用户反馈 |
-| 14 | GET | `/api/feedback/list` | 是 | 分页查询用户反馈 |
-| 15 | POST | `/api/feedback/set-done` | 是 | 标记反馈是否已完成 |
-| 16 | POST | `/api/client/feedback/query` | 否 | 按机器码查询匿名反馈及处理结果 |
-| 17 | POST | `/api/client/u/{username}/feedback/query` | 否 | 按机器码查询指定用户归属的反馈及处理结果 |
-| 18 | POST | `/api/feedback/reply` | 是 | 保存或修改反馈回复 |
-| 19 | GET | `/api/announcement` | 是 | 获取当前管理员公告草稿 |
-| 20 | POST | `/api/announcement` | 是 | 创建或修改当前管理员公告 |
-| 21 | GET | `/api/client/u/{username}/announcement` | 否 | 获取指定用户已启用的公告 |
-| 22 | GET/POST | `/api/skinforge/kdocs-settings` | 是 | 查询或更新云文档配置 |
-| 23 | GET/POST | `/api/skinforge/release` | 是 | 查询或发布当前 SkinForge 版本 |
-| 24 | GET | `/api/skinforge/hash-status` | 是 | 查询 Hash 同步及当前发布状态 |
-| 25 | POST | `/api/skinforge/hash-sync` | 是 | 手动触发 Hash 同步 |
-| 26 | GET | `/api/client/skinforge/update/{target}/{arch}/{current_version}` | 否 | Tauri 动态更新 |
-| 27 | GET | `/api/client/skinforge/hash` | 否 | 获取 Hash OSS 下载元数据 |
-| 28 | GET (WebSocket) | `/api/client/u/{username}/cdk-events` | CDK + HWID Header | 监听当前绑定的换绑失效事件 |
-| 29 | GET | `/api/cdk/{cdk_id}/binding-history` | 是 | 查询单个 CDK 的成功绑定历史与机器汇总 |
-| 30 | GET | `/api/cdk/multi-device-bindings` | 是 | 分页查询成功换绑超过 5 次的多设备 CDK |
-
-> `/api/client/*` 和 `/api/cdk/validate|activate` 使用相同的处理逻辑，区别仅在于是否需要 JWT 认证。
+| 10 | GET | `/api/cdk/{cdk_id}/binding-history` | 是 | 查询单个 CDK 的成功绑定历史与机器汇总 |
+| 11 | GET | `/api/cdk/multi-device-bindings` | 是 | 分页查询成功换绑超过 5 次的多设备 CDK |
+| 12 | GET | `/api/banned/list` | 是 | 查询封禁机器列表 |
+| 13 | POST | `/api/banned/ban` | 是 | 封禁机器 |
+| 14 | POST | `/api/banned/unban` | 是 | 解除机器封禁 |
+| 15 | POST | `/api/client/u/{username}/validate` | 否 | 校验指定用户归属的 CDK |
+| 16 | POST | `/api/client/u/{username}/activate` | 否 | 激活指定用户归属的 CDK |
+| 17 | POST | `/api/client/u/{username}/feedback` | 否 | 提交指定用户归属的用户反馈 |
+| 18 | POST | `/api/client/u/{username}/feedback/query` | 否 | 按机器码查询指定用户归属的反馈及处理结果 |
+| 19 | GET (WebSocket) | `/api/client/u/{username}/cdk-events` | CDK + HWID Header | 监听当前绑定的换绑失效事件 |
+| 20 | GET | `/api/feedback/list` | 是 | 分页查询用户反馈 |
+| 21 | POST | `/api/feedback/set-done` | 是 | 标记反馈是否已完成 |
+| 22 | POST | `/api/feedback/reply` | 是 | 保存或修改反馈回复 |
+| 23 | GET | `/api/announcement` | 是 | 获取当前管理员公告草稿 |
+| 24 | POST | `/api/announcement` | 是 | 创建或修改当前管理员公告 |
+| 25 | GET | `/api/client/u/{username}/announcement` | 否 | 获取指定用户已启用的公告 |
+| 26 | GET/POST | `/api/skinforge/kdocs-settings` | 是 | 查询或更新云文档配置 |
+| 27 | GET/POST | `/api/skinforge/release` | 是 | 查询或发布当前 SkinForge 版本 |
+| 28 | GET | `/api/skinforge/hash-status` | 是 | 查询 Hash 同步及当前发布状态 |
+| 29 | POST | `/api/skinforge/hash-sync` | 是 | 手动触发 Hash 同步 |
+| 30 | GET | `/api/client/skinforge/update/{target}/{arch}/{current_version}` | 否 | Tauri 动态更新 |
+| 31 | GET | `/api/client/skinforge/hash` | 否 | 获取 Hash OSS 下载元数据 |
 
 ### CDK 换绑失效 WebSocket
 
@@ -523,11 +522,9 @@ curl -X GET "http://localhost/api/cdk/export?status=activated&date_from=2026-05-
 
 ## 6. 验证 CDK
 
-### `POST /api/cdk/validate`（需认证）
-### `POST /api/client/validate`（无需认证）
 ### `POST /api/client/u/{username}/validate`（租户客户端，无需认证）
 
-验证 CDK 是否有效。三个路径的处理逻辑完全相同。
+验证指定用户归属的 CDK 是否有效。
 
 **请求参数**：
 
@@ -540,18 +537,7 @@ curl -X GET "http://localhost/api/cdk/export?status=activated&date_from=2026-05-
 **调用示例**：
 
 ```bash
-# 管理端（需 Token）
-curl -X POST http://localhost/api/cdk/validate \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer eyJhbGci..." \
-  -d '{
-    "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
-    "machine_code": "MACHINE-001",
-    "version": "2.5.3"
-  }'
-
-# 客户端（无需 Token）
-curl -X POST http://localhost/api/client/validate \
+curl -X POST http://localhost/api/client/u/a/validate \
   -H "Content-Type: application/json" \
   -d '{
     "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
@@ -587,11 +573,9 @@ curl -X POST http://localhost/api/client/validate \
 
 ## 7. 激活 CDK
 
-### `POST /api/cdk/activate`（需认证）
-### `POST /api/client/activate`（无需认证）
 ### `POST /api/client/u/{username}/activate`（租户客户端，无需认证）
 
-激活 CDK 并绑定机器码。管理端和通用客户端请求契约保持不变；租户客户端还必须提供版本号。
+激活指定用户归属的 CDK 并绑定机器码。
 
 **请求参数**：
 
@@ -599,29 +583,11 @@ curl -X POST http://localhost/api/client/validate \
 |------|------|------|------|
 | code | string | 是 | CDK 激活码 |
 | machine_code | string | 是 | 机器码 |
-| version | string | 租户客户端必填 | 客户端 SemVer 版本号，必须不低于 `2.5.3` |
+| version | string | 是 | 客户端 SemVer 版本号，必须不低于 `2.5.3` |
 
 **调用示例**：
 
 ```bash
-# 管理端
-curl -X POST http://localhost/api/cdk/activate \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer eyJhbGci..." \
-  -d '{
-    "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
-    "machine_code": "MACHINE-001"
-  }'
-
-# 客户端
-curl -X POST http://localhost/api/client/activate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
-    "machine_code": "MACHINE-001"
-  }'
-
-# 租户客户端（SkinForge）
 curl -X POST http://localhost/api/client/u/a/activate \
   -H "Content-Type: application/json" \
   -d '{
@@ -799,12 +765,9 @@ curl -X POST http://localhost/api/cdk/update-validity \
 
 ## 10. 提交用户反馈
 
-### `POST /api/client/feedback`
 ### `POST /api/client/u/{username}/feedback`
 
-采集客户端用户反馈。接口无需 JWT 认证，适合在客户端内直接调用。
-
-`/api/client/feedback` 会保存一条不绑定后台用户的反馈记录；`/api/client/u/{username}/feedback` 会把反馈记录绑定到指定用户名对应的用户，便于后续按业务归属处理。
+采集指定用户归属的客户端反馈。接口无需 JWT 认证。
 
 **请求参数**：
 
@@ -820,24 +783,6 @@ curl -X POST http://localhost/api/cdk/update-validity \
 | metadata | object | 否 | 扩展信息，会以 JSON 字符串保存，序列化后最长 10000 字符 |
 
 **调用示例**：
-
-```bash
-curl -X POST http://localhost/api/client/feedback \
-  -H "Content-Type: application/json" \
-  -d '{
-    "feedback_type": "bug",
-    "content": "点击激活后没有响应",
-    "contact": "user@example.com",
-    "machine_code": "MACHINE-001",
-    "cdk_code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
-    "app_version": "1.2.3",
-    "platform": "windows",
-    "metadata": {
-      "os_version": "Windows 11",
-      "locale": "zh-CN"
-    }
-  }'
-```
 
 ```bash
 curl -X POST http://localhost/api/client/u/admin/feedback \
@@ -872,12 +817,11 @@ curl -X POST http://localhost/api/client/u/admin/feedback \
 
 ## 11. 客户端查询反馈结果
 
-### `POST /api/client/feedback/query`
 ### `POST /api/client/u/{username}/feedback/query`
 
 客户端按机器码精确查询自己提交的反馈及管理员回复。接口无需 JWT 认证；机器码放在请求体中，不会出现在 URL 和常规访问日志里。
 
-默认接口只返回通过 `/api/client/feedback` 提交的匿名反馈；带用户名的接口返回该用户名归属的反馈以及匿名反馈，与该用户管理后台的可见范围保持一致。用户名不存在时返回 404。
+接口返回该用户名归属的反馈以及历史匿名反馈，与该用户管理后台的可见范围保持一致。用户名不存在时返回 404。
 
 **请求参数**：
 
@@ -1353,7 +1297,7 @@ curl http://localhost/api/client/u/admin/announcement
 | metadata | object \| null | 扩展信息；库内以 JSON 文本存储，查询接口反序列化为 JSON 对象返回；非法 JSON 时返回 `null` |
 | reply | string \| null | 管理员回复；可描述结果、进展或计划 |
 | replied_at | string \| null | 最近一次保存回复的时间 |
-| created_by | number \| null | 归属用户 ID；直接调用 `/api/client/feedback` 时为空 |
+| created_by | number \| null | 归属用户 ID；历史匿名反馈记录为空 |
 | is_done | boolean | 是否已完成，默认 `false` |
 | done_at | string \| null | 标记完成时间；重新打开后为空 |
 | created_at | string | 创建时间 |

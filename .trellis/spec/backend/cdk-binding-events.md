@@ -4,7 +4,7 @@
 
 ### 1. Scope / Trigger
 
-Read this spec when changing either activate route, `cdkeys.machine_code`, CDK
+Read this spec when changing the tenant activate route, `cdkeys.machine_code`, CDK
 binding history, the cross-CDK multi-device overview, the client WebSocket
 endpoint, Nginx `/api/` proxying, or the in-memory connection registry. A
 successful rebind crosses a MySQL transaction and an online notification;
@@ -14,7 +14,6 @@ database commit order is the security boundary.
 
 ```text
 POST /api/client/u/{username}/activate
-POST /api/client/activate
 GET  /api/client/u/{username}/cdk-events  (WebSocket)
 GET  /api/cdk/{cdk_id}/binding-history?page=1&page_size=50  (JWT admin)
 GET  /api/cdk/multi-device-bindings?page=1&page_size=20&search=...  (JWT admin)
@@ -51,8 +50,7 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
   `POST /api/client/u/{username}/activate` both require the flat JSON fields
   `code`, `machine_code`, and SemVer `version`. Both reject versions below the
   shared `MIN_CLIENT_VERSION` (`2.5.3`) before any database query or activation
-  side effect. The generic `/api/client/activate` and protected
-  `/api/cdk/activate` keep their legacy `code` + `machine_code` contract.
+  side effect. Legacy generic/admin activation routes are not exposed.
 - `activate_for_owner` trims and bounds CDK/HWID, resolves the tenant before it
   begins the binding transaction, and trusts only a parseable `X-Real-IP` from
   the private Nginx hop.
@@ -135,7 +133,6 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 | tenant validate/activate omits `version` | JSON rejection; handler and database are not reached |
 | tenant validate/activate has malformed SemVer | HTTP 400 `客户端版本号格式无效` |
 | tenant validate/activate version is below `2.5.3` | HTTP 400 `客户端版本过低，最低要求版本 2.5.3` |
-| generic/admin activate omits `version` | preserve legacy activation behavior |
 | missing/blank CDK or HWID | HTTP 400 |
 | CDK > 64 chars or HWID > 256 chars | HTTP 400 |
 | unknown tenant/binding, wrong machine, disabled/expired CDK | WebSocket 401 without detail |
@@ -166,8 +163,6 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 
 - Good: SkinForge `2.5.3` sends the same compile-time version on validate and
   activate, so either authorization path passes the same minimum-version gate.
-- Base: the legacy generic activation CLI omits `version` and continues to use
-  `/api/client/activate`; it is intentionally outside the SkinForge gate.
 - Bad: validating the version only in `user_validate` lets an old client call
   `user_activate`, receive `valid`, and enter the main UI without validation.
 - Good: A is locked, updates to B, writes `A -> B`, commits, then invalidates only A.
@@ -213,9 +208,8 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 
 - Version boundary unit tests: malformed, `2.5.2`, prerelease below `2.5.3`,
   exact `2.5.3`, and a higher version.
-- Request-contract tests: tenant activation without `version` fails to
-  deserialize, while the generic `ActivateRequest` still accepts only `code`
-  and `machine_code`.
+- Request-contract test: tenant activation without `version` fails to
+  deserialize; a complete request preserves the nested activation payload.
 - Protocol serialization: assert v1/type/reason and absence of credential fields.
 - Registry: targeted multi-connection invalidation, idempotent cleanup, and 3000 cap.
 - Integration race: pause between pre-upgrade validation and registry insertion,

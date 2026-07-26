@@ -68,8 +68,6 @@ async fn main() {
         .route("/cdk/export", get(handlers::cdk::export))
         .route("/cdk/usage-stats", get(handlers::cdk::usage_stats))
         .route("/cdk/machine-usage", get(handlers::cdk::machine_usage))
-        .route("/cdk/validate", post(handlers::cdk::validate))
-        .route("/cdk/activate", post(handlers::cdk::activate))
         .route("/cdk/disable", post(handlers::cdk::disable))
         .route("/cdk/update-validity", post(handlers::cdk::update_validity))
         .route("/banned/list", get(handlers::banned::list))
@@ -99,15 +97,6 @@ async fn main() {
             state.clone(),
             middleware::auth::auth_middleware,
         ));
-
-    let client_routes = Router::new()
-        .route("/client/validate", post(handlers::cdk::validate))
-        .route("/client/activate", post(handlers::cdk::activate))
-        .route("/client/feedback", post(handlers::feedback::submit))
-        .route(
-            "/client/feedback/query",
-            post(handlers::feedback::query_for_client),
-        );
 
     let user_client_routes = Router::new()
         .route(
@@ -146,7 +135,6 @@ async fn main() {
     let app = Router::new()
         .route("/api/auth/login", post(handlers::auth::login))
         .nest("/api", protected)
-        .nest("/api", client_routes)
         .nest("/api", user_client_routes)
         .layer(cors)
         .with_state(state);

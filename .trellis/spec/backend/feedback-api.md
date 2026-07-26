@@ -4,20 +4,18 @@
 
 ---
 
-## Scenario: User feedback submit / client query / admin reply and completion
+## Scenario: Tenant feedback submit / client query / admin reply and completion
 
 ### 1. Scope / Trigger
 
-- Trigger: new public client routes + authenticated admin routes + `user_feedback` table/migrations.
+- Trigger: tenant-scoped public client routes + authenticated admin routes + `user_feedback` table/migrations.
 - Why code-spec depth: cross-layer request/response, schema, validation, and tenant visibility rules.
 
 ### 2. Signatures
 
 | Method | Path | Auth |
 |--------|------|------|
-| `POST` | `/api/client/feedback` | No — `created_by = NULL` |
 | `POST` | `/api/client/u/{username}/feedback` | No — resolve user by username; 404 if missing |
-| `POST` | `/api/client/feedback/query` | No — anonymous rows for exact machine code |
 | `POST` | `/api/client/u/{username}/feedback/query` | No — username-owned + anonymous rows for exact machine code |
 | `GET` | `/api/feedback/list` | JWT |
 | `POST` | `/api/feedback/set-done` | JWT |
@@ -54,8 +52,7 @@ Handlers/models: `handlers/feedback.rs`, `models/feedback.rs`.
 
 **Client query success `data`**: `{ items, total, page, page_size }`, newest first. `items` must use the dedicated allowlisted `ClientFeedbackItem` fields only: `id`, `feedback_type`, `content`, `is_done`, `reply`, `replied_at`, `done_at`, `created_at`.
 
-- Default query visibility: `machine_code = ? AND created_by IS NULL`.
-- Username-scoped query visibility: `machine_code = ? AND (created_by = resolved_user_id OR created_by IS NULL)`.
+- Username-scoped query visibility: `machine_code = ? AND (created_by = resolved_user_id OR created_by IS NULL)`. The `NULL` branch preserves access to historical anonymous rows; no current route creates new anonymous feedback.
 - No match is not an error: return empty `items` and `total: 0`.
 
 **List query**: `page` (default 1, min 1), `page_size` (default 10, max 50), `feedback_type?`, `is_done?`, `search?` (fuzzy on content/contact/machine_code/cdk_code).
@@ -91,7 +88,7 @@ Handlers/models: `handlers/feedback.rs`, `models/feedback.rs`.
 
 ### 5. Good / Base / Bad Cases
 
-- **Good**: `POST /api/client/feedback` with `{ "content": "卡激活失败" }` → 200 + `id`.
+- **Good**: `POST /api/client/u/a/feedback` with `{ "content": "卡激活失败" }` → 200 + `id` owned by user `a`.
 - **Base**: reply「已纳入后续版本计划」to a pending item → reply fields change, while `is_done = false` and `done_at = null` remain unchanged.
 - **Good query**: username-scoped query sees matching anonymous + same-owner rows, ordered by `created_at DESC, id DESC`.
 - **Bad**: empty query machine code → 400; client query never serializes `contact`, `cdk_code`, `metadata`, `created_by`, `app_version`, or `platform`; reply to another user's owned row → 404.
@@ -99,7 +96,7 @@ Handlers/models: `handlers/feedback.rs`, `models/feedback.rs`.
 ### 6. Tests Required
 
 - Insert anonymous + owned feedback; list as user A sees anonymous + A's rows only.
-- Client default query returns only matching anonymous rows; scoped query returns matching anonymous + same-owner rows and never another owner's rows.
+- Tenant query returns matching historical anonymous + same-owner rows and never another owner's rows.
 - Serialize a client query item and assert the exact allowlist, including absence of management/troubleshooting fields.
 - Client query pagination is stable for equal timestamps because `id DESC` is the secondary ordering key.
 - Validation matrix unit/handler coverage for empty content and oversized metadata.
@@ -163,11 +160,11 @@ WHERE id = ? AND (created_by = ? OR created_by IS NULL)
 
 ## Design Decision: Anonymous feedback visibility
 
-**Context**: Client can submit without binding a backend user.
+**Context**: Older generic client routes could create feedback without binding a backend user. Those routes are removed, but historical rows may still have `created_by IS NULL`.
 
-**Decision**: Anonymous rows (`created_by IS NULL`) are visible and closable by any authenticated admin; owned rows stay scoped to that user.
+**Decision**: No current route creates anonymous feedback. Existing anonymous rows (`created_by IS NULL`) remain visible and closable by any authenticated admin and remain visible to tenant client queries with the same machine code; owned rows stay scoped to that user.
 
-**Why**: Improves triage of client-reported issues without requiring username in every payload.
+**Why**: Removing unused public write routes reduces attack surface without destroying or hiding historical support records.
 
 **Related**: Full field tables and curl examples live in repo-root `API.md`.
 

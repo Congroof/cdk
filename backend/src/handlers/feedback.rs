@@ -20,13 +20,6 @@ const MAX_REPLY_LEN: usize = 5000;
 const DEFAULT_CLIENT_PAGE_SIZE: u32 = 20;
 const MAX_CLIENT_PAGE_SIZE: u32 = 50;
 
-pub async fn submit(
-    State(state): State<AppState>,
-    Json(payload): Json<SubmitFeedbackRequest>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    insert_feedback(&state, None, payload).await
-}
-
 pub async fn submit_for_user(
     State(state): State<AppState>,
     Path(username): Path<String>,
@@ -38,14 +31,7 @@ pub async fn submit_for_user(
         .await?
         .ok_or_else(|| AppError::NotFound("用户不存在".to_string()))?;
 
-    insert_feedback(&state, Some(owner_id.0), payload).await
-}
-
-pub async fn query_for_client(
-    State(state): State<AppState>,
-    Json(payload): Json<ClientFeedbackQueryRequest>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    query_client_feedback(&state, None, payload).await
+    insert_feedback(&state, owner_id.0, payload).await
 }
 
 pub async fn query_for_user_client(
@@ -59,7 +45,7 @@ pub async fn query_for_user_client(
         .await?
         .ok_or_else(|| AppError::NotFound("用户不存在".to_string()))?;
 
-    query_client_feedback(&state, Some(owner_id.0), payload).await
+    query_client_feedback(&state, owner_id.0, payload).await
 }
 
 pub async fn list(
@@ -248,7 +234,7 @@ pub async fn reply(
 
 async fn query_client_feedback(
     state: &AppState,
-    owner_id: Option<i64>,
+    owner_id: i64,
     payload: ClientFeedbackQueryRequest,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let machine_code = payload.machine_code.trim().to_string();
@@ -268,54 +254,32 @@ async fn query_client_feedback(
     let select_fields =
         "id, feedback_type, content, is_done, reply, replied_at, done_at, created_at";
 
-    let (total, items): (i64, Vec<ClientFeedbackItem>) = if let Some(owner_id) = owner_id {
-        let total: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM user_feedback \
-             WHERE machine_code = ? AND (created_by = ? OR created_by IS NULL)",
-        )
+    let total: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM user_feedback \
+         WHERE machine_code = ? AND (created_by = ? OR created_by IS NULL)",
+    )
+    .bind(&machine_code)
+    .bind(owner_id)
+    .fetch_one(&state.db)
+    .await?;
+    let sql = format!(
+        "SELECT {select_fields} FROM user_feedback \
+         WHERE machine_code = ? AND (created_by = ? OR created_by IS NULL) \
+         ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
+    );
+    let items = sqlx::query_as::<_, ClientFeedbackItem>(&sql)
         .bind(&machine_code)
         .bind(owner_id)
-        .fetch_one(&state.db)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&state.db)
         .await?;
-        let sql = format!(
-            "SELECT {select_fields} FROM user_feedback \
-             WHERE machine_code = ? AND (created_by = ? OR created_by IS NULL) \
-             ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
-        );
-        let items = sqlx::query_as::<_, ClientFeedbackItem>(&sql)
-            .bind(&machine_code)
-            .bind(owner_id)
-            .bind(page_size)
-            .bind(offset)
-            .fetch_all(&state.db)
-            .await?;
-        (total.0, items)
-    } else {
-        let total: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM user_feedback WHERE machine_code = ? AND created_by IS NULL",
-        )
-        .bind(&machine_code)
-        .fetch_one(&state.db)
-        .await?;
-        let sql = format!(
-            "SELECT {select_fields} FROM user_feedback \
-             WHERE machine_code = ? AND created_by IS NULL \
-             ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
-        );
-        let items = sqlx::query_as::<_, ClientFeedbackItem>(&sql)
-            .bind(&machine_code)
-            .bind(page_size)
-            .bind(offset)
-            .fetch_all(&state.db)
-            .await?;
-        (total.0, items)
-    };
 
     Ok(Json(serde_json::json!({
         "success": true,
         "data": {
             "items": items,
-            "total": total,
+            "total": total.0,
             "page": page,
             "page_size": page_size,
         },
@@ -324,7 +288,7 @@ async fn query_client_feedback(
 
 async fn insert_feedback(
     state: &AppState,
-    owner_id: Option<i64>,
+    owner_id: i64,
     payload: SubmitFeedbackRequest,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let feedback_type = validate_optional_string(

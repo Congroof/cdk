@@ -85,9 +85,9 @@ npm run build
 | POST | `/api/auth/login` | 管理员登录 | 无 |
 | POST | `/api/cdk/generate` | 批量生成 CDK | JWT |
 | GET | `/api/cdk/list` | 分页查询 CDK 列表 | JWT |
-| POST | `/api/cdk/validate` | 校验 CDK 是否合法 | JWT |
-| POST | `/api/cdk/activate` | 激活 CDK（绑定机器码） | JWT |
 | POST | `/api/cdk/disable` | 禁用 CDK | JWT |
+| POST | `/api/client/u/{username}/validate` | SkinForge 校验 CDK | 无 |
+| POST | `/api/client/u/{username}/activate` | SkinForge 激活 CDK | 无 |
 | GET/POST | `/api/skinforge/kdocs-settings` | 查询或更新加密的云文档配置 | JWT |
 | GET/POST | `/api/skinforge/release` | 查询或发布最新 SkinForge Windows 版本 | JWT |
 | GET | `/api/skinforge/hash-status` | 查询 Hash 同步状态 | JWT |
@@ -111,22 +111,6 @@ curl -X POST http://localhost:3000/api/cdk/generate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
   -d '{"count":5,"valid_days":30,"remark":"测试批次"}'
-```
-
-**校验 CDK：**
-```bash
-curl -X POST http://localhost:3000/api/cdk/validate \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{"code":"CDK-XXXX-XXXX-XXXX","machine_code":"optional-machine-id","version":"2.5.3"}'
-```
-
-**激活 CDK：**
-```bash
-curl -X POST http://localhost:3000/api/cdk/activate \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{"code":"CDK-XXXX-XXXX-XXXX","machine_code":"MACHINE-ID-HERE"}'
 ```
 
 **禁用 CDK：**

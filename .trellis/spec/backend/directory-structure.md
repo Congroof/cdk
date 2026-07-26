@@ -62,7 +62,7 @@ backend/
 | Struct names | PascalCase | `CdkRow`, `GenerateRequest` |
 | Enum variants | PascalCase | `AppError::BadRequest` |
 | SQL table names | snake_case plural | `cdkeys`, `usage_logs`, `banned_machines`, `user_feedback` |
-| Route paths | kebab-case or slash-separated nouns | `/api/cdk/list`, `/api/client/validate` |
+| Route paths | kebab-case or slash-separated nouns | `/api/cdk/list`, `/api/client/u/{username}/validate` |
 
 ---
 
