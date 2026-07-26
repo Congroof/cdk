@@ -5,6 +5,7 @@ use axum::http::HeaderMap;
 use axum::{Extension, Json};
 use chrono::Utc;
 use rand::Rng;
+use semver::Version;
 
 use crate::errors::AppError;
 use crate::middleware::auth::Claims;
@@ -17,6 +18,18 @@ const BINDING_HISTORY_MAX_MACHINE_SUMMARIES: u32 = 100;
 const MULTI_DEVICE_DEFAULT_PAGE_SIZE: u32 = 20;
 const MULTI_DEVICE_MAX_PAGE_SIZE: u32 = 100;
 const MULTI_DEVICE_MAX_SEARCH_LENGTH: usize = 256;
+const MIN_CLIENT_VERSION: &str = "2.5.0";
+
+fn validate_client_version(version: &str) -> Result<(), AppError> {
+    let version = Version::parse(version.trim())
+        .map_err(|_| AppError::BadRequest("客户端版本号格式无效".to_string()))?;
+    if version < Version::new(2, 5, 0) {
+        return Err(AppError::BadRequest(format!(
+            "客户端版本过低，最低要求版本 {MIN_CLIENT_VERSION}"
+        )));
+    }
+    Ok(())
+}
 
 pub async fn usage_stats(
     State(state): State<AppState>,
@@ -628,6 +641,8 @@ pub async fn validate(
     State(state): State<AppState>,
     Json(payload): Json<ValidateRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    validate_client_version(&payload.version)?;
+
     let admin_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = 'admin'")
         .fetch_one(&state.db)
         .await?;
@@ -1183,6 +1198,8 @@ pub async fn user_validate(
     axum::extract::Path(username): axum::extract::Path<String>,
     Json(payload): Json<ValidateRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    validate_client_version(&payload.version)?;
+
     let owner_id: (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
         .bind(&username)
         .fetch_optional(&state.db)
@@ -1306,6 +1323,24 @@ pub async fn user_activate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn client_version_must_be_valid_and_supported() {
+        assert!(validate_client_version("2.5.0").is_ok());
+        assert!(validate_client_version("2.5.1").is_ok());
+        assert!(validate_client_version("3.0.0").is_ok());
+        assert!(validate_client_version("2.4.9").is_err());
+        assert!(validate_client_version("invalid").is_err());
+    }
+
+    #[test]
+    fn validate_request_requires_version() {
+        let request = serde_json::json!({
+            "code": "CDK-123",
+            "machine_code": "HWID-123"
+        });
+        assert!(serde_json::from_value::<ValidateRequest>(request).is_err());
+    }
 
     #[test]
     fn trusted_client_ip_only_accepts_literal_ip_addresses() {

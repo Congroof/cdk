@@ -531,6 +531,7 @@ curl -X GET "http://localhost/api/cdk/export?status=activated&date_from=2026-05-
 |------|------|------|------|
 | code | string | 是 | CDK 激活码 |
 | machine_code | string | 否 | 机器码（已激活的 CDK 用于校验绑定关系） |
+| version | string | 是 | 客户端 SemVer 版本号，必须不低于 `2.5.0` |
 
 **调用示例**：
 
@@ -541,7 +542,8 @@ curl -X POST http://localhost/api/cdk/validate \
   -H "Authorization: Bearer eyJhbGci..." \
   -d '{
     "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
-    "machine_code": "MACHINE-001"
+    "machine_code": "MACHINE-001",
+    "version": "2.5.0"
   }'
 
 # 客户端（无需 Token）
@@ -549,7 +551,8 @@ curl -X POST http://localhost/api/client/validate \
   -H "Content-Type: application/json" \
   -d '{
     "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
-    "machine_code": "MACHINE-001"
+    "machine_code": "MACHINE-001",
+    "version": "2.5.0"
   }'
 ```
 

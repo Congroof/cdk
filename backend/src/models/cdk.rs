@@ -89,6 +89,7 @@ pub struct GenerateRequest {
 pub struct ValidateRequest {
     pub code: String,
     pub machine_code: Option<String>,
+    pub version: String,
 }
 
 #[derive(Debug, Serialize)]
