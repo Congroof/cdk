@@ -376,3 +376,36 @@ Reduced the feedback table to content and actions, moved type, related informati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: 筛选高换绑次数的多设备 CDK
+
+**Date**: 2026-07-26
+**Task**: 筛选高换绑次数的多设备 CDK
+**Branch**: `main`
+
+### Summary
+
+多设备 CDK 列表固定只返回成功换绑次数大于 5 的记录，不限制当前状态；同步后端聚合、回归测试、页面说明、API 文档和项目规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `89eeda3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
