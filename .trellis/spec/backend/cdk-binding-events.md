@@ -102,13 +102,14 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
   must label the metric `成功绑定次数` and disclose when machine rows are truncated.
 - The multi-device overview returns only owned CDKs whose old/new machine union
   has at least two distinct values and whose committed `rebind` history count is
-  at least 6 (`rebind_count > 5`). The threshold belongs in the shared server-side
-  aggregation used by both total and data queries; never filter only the current
-  frontend page. Current CDK status is not a filter. The endpoint is tenant-scoped
-  by the JWT owner, defaults to 20 rows, clamps page and page size to 1 and 100,
-  and rejects search text over 256 characters. Search matches the CDK code,
-  current machine, or either side of any historical binding row. Ordering is stable:
-  `last_bound_at DESC, machine_count DESC, cdk_id DESC`.
+  at least 6 (`rebind_count > 5`) and strictly greater than that CDK's distinct
+  machine count (`rebind_count > machine_count`). Both thresholds belong in the
+  shared server-side query used by total and data queries; never filter only the
+  current frontend page. Current CDK status is not a filter. The endpoint is
+  tenant-scoped by the JWT owner, defaults to 20 rows, clamps page and page size
+  to 1 and 100, and rejects search text over 256 characters. Search matches the
+  CDK code, current machine, or either side of any historical binding row.
+  Ordering is stable: `last_bound_at DESC, machine_count DESC, cdk_id DESC`.
 - The multi-device overview is a bounded summary, not a second full-history
   response. It returns the current machine, distinct machine count, successful
   binding count, rebind count, and latest binding time; the existing protected
@@ -153,7 +154,8 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 | multi-device page size exceeds 100 | clamp to 100 |
 | tenant has no CDK used by two machines | success with empty items and zero total |
 | multi-device CDK has 5 committed rebind rows | exclude it from items and total |
-| multi-device CDK has at least 6 committed rebind rows | include it regardless of current activated/expired/disabled status |
+| multi-device CDK has at least 6 rebind rows but `rebind_count <= machine_count` | exclude it from items and total |
+| multi-device CDK has at least 6 rebind rows and `rebind_count > machine_count` | include it regardless of current activated/expired/disabled status |
 | another tenant has a multi-device CDK | exclude it from results and search |
 | tenant has no registered WebSocket keys | `online_devices = 0` |
 | one binding has multiple registered connections | `online_devices` counts it once |
@@ -181,12 +183,14 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
   3, and rebind count 2; current machine A is marked from `cdkeys`.
 - Good: a legacy first event A -> B makes the CDK eligible for the multi-device
   machine-membership aggregation and lists both machines; A's count is labeled
-  unknown/incomplete. It enters the overview list only after its sixth committed
-  rebind event.
-- Good: an expired CDK with six committed rebind rows remains visible because
-  current status is descriptive data, not a filter.
+  unknown/incomplete. It enters the overview list only when it has at least six
+  committed rebind events and its rebind count is greater than its machine count.
+- Good: an expired CDK with six committed rebind rows and two historical machines
+  remains visible because current status is descriptive data, not a filter.
 - Base: a multi-device CDK with exactly five committed rebind rows is absent from
   both paged items and the pagination total.
+- Base: a CDK with six committed rebind rows and six historical machines is absent
+  from both paged items and the pagination total because the comparison is strict.
 - Good: a fully recorded `NULL -> A`, then `A -> B`, lists both machines with
   complete per-machine binding counts.
 - Base: a pre-history CDK returns its current `cdkeys.machine_code` with zero
@@ -233,8 +237,9 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
   activate A, A -> B -> A aggregation, stable event paging, client IP/null IP,
   and cross-tenant ID returning the same 404 as an unknown ID.
 - Admin multi-device integration tests when MySQL is available: legacy A -> B,
-  five-vs-six rebind boundary, status independence, tenant isolation,
-  code/current/history search, total/data consistency, and stable paging.
+  five-vs-six rebind boundary, rebind-count-vs-machine-count less/equal/greater
+  boundaries, status independence, tenant isolation, code/current/history search,
+  total/data consistency, and stable paging.
 - Frontend checks: exact snake_case DTO fields, current-machine badge, successful
   binding count label, empty/error/loading states, event paging, long HWID/IP
   rendering, and the 100-machine truncation notice. `MobileCdk` remains unchanged.
@@ -342,14 +347,18 @@ const items = response.data.items.filter((item) => item.rebind_count > 5);
 #### Correct
 
 ```sql
--- Put the fixed threshold in the shared history aggregation consumed by both
--- the count query and the paged data query.
+-- Put both the fixed threshold and the cross-aggregate comparison in the shared
+-- query consumed by the count query and the paged data query.
 SELECT created_by, cdk_id,
        COUNT(CASE WHEN event_type = 'rebind' THEN 1 END) AS rebind_count
 FROM cdk_binding_history
 WHERE created_by = ?
 GROUP BY created_by, cdk_id
 HAVING COUNT(CASE WHEN event_type = 'rebind' THEN 1 END) >= 6;
+
+-- After joining the machine and history aggregates:
+WHERE c.created_by = ?
+  AND history_stats.rebind_count > device_stats.machine_count;
 ```
 
 #### Wrong

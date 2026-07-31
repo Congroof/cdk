@@ -443,7 +443,8 @@ fn multi_device_base_sql(select_clause: &str, has_search: bool) -> String {
                  >= {MULTI_DEVICE_MIN_REBIND_COUNT}\
          ) history_stats ON history_stats.cdk_id = c.id \
              AND history_stats.created_by = c.created_by \
-         WHERE c.created_by = ?{search_clause}"
+         WHERE c.created_by = ? \
+             AND history_stats.rebind_count > device_stats.machine_count{search_clause}"
     )
 }
 
@@ -1324,6 +1325,7 @@ mod tests {
         assert!(without_search.contains("HAVING COUNT(DISTINCT machine_code) >= 2"));
         assert!(without_search
             .contains("HAVING COUNT(CASE WHEN event_type = 'rebind' THEN 1 END) >= 6"));
+        assert!(without_search.contains("history_stats.rebind_count > device_stats.machine_count"));
         assert_eq!(without_search.matches('?').count(), 4);
 
         let with_search = multi_device_base_sql("SELECT c.id", true);

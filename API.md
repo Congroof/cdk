@@ -65,7 +65,7 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 8 | POST | `/api/cdk/disable` | 是 | 禁用 CDK |
 | 9 | POST | `/api/cdk/update-validity` | 是 | 修改未使用 CDK 有效期 / 延长已激活 CDK 过期时间 |
 | 10 | GET | `/api/cdk/{cdk_id}/binding-history` | 是 | 查询单个 CDK 的成功绑定历史与机器汇总 |
-| 11 | GET | `/api/cdk/multi-device-bindings` | 是 | 分页查询成功换绑超过 5 次的多设备 CDK |
+| 11 | GET | `/api/cdk/multi-device-bindings` | 是 | 分页查询成功换绑超过 5 次且换绑次数大于历史机器数的多设备 CDK |
 | 12 | GET | `/api/banned/list` | 是 | 查询封禁机器列表 |
 | 13 | POST | `/api/banned/ban` | 是 | 封禁机器 |
 | 14 | POST | `/api/banned/unban` | 是 | 解除机器封禁 |
@@ -370,8 +370,8 @@ curl -X GET "http://localhost/api/cdk/42/binding-history?page=1&page_size=20" \
 
 ### `GET /api/cdk/multi-device-bindings`
 
-分页查询当前管理员拥有、成功换绑次数严格大于 5、且成功绑定历史涉及至少两台不同机器的
-CDK。多设备判断使用成功记录中非空旧/新机器码的并集，换绑次数只统计
+分页查询当前管理员拥有、成功换绑次数严格大于 5、换绑次数严格大于历史机器数，且成功绑定
+历史涉及至少两台不同机器的 CDK。多设备判断使用成功记录中非空旧/新机器码的并集，换绑次数只统计
 `event_type = "rebind"` 的成功记录，不读取包含失败尝试的 `usage_logs`。查询不限制 CDK
 当前状态。
 
@@ -419,9 +419,10 @@ curl -X GET "http://localhost/api/cdk/multi-device-bindings?page=1&page_size=20&
 }
 ```
 
-结果只包含 `machine_count >= 2` 且 `rebind_count > 5` 的 CDK，按最近成功绑定时间倒序、
-历史机器数倒序、CDK ID 倒序稳定排列。5 次换绑不返回，从 6 次开始返回；当前 CDK 状态
-不参与筛选。列表不返回完整机器数组和时间线；需要详情时继续调用单 CDK 绑定历史接口。
+结果只包含 `machine_count >= 2`、`rebind_count > 5` 且
+`rebind_count > machine_count` 的 CDK，按最近成功绑定时间倒序、历史机器数倒序、CDK ID
+倒序稳定排列。5 次换绑不返回，从 6 次开始返回；换绑次数等于历史机器数时也不返回。当前
+CDK 状态不参与筛选。列表不返回完整机器数组和时间线；需要详情时继续调用单 CDK 绑定历史接口。
 所有聚合和搜索均按 JWT 当前用户的 `created_by` 隔离。
 
 ---

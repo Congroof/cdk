@@ -80,7 +80,7 @@ export default function MultiDeviceCdkList() {
             <h2 className="text-lg font-semibold text-white">多设备 CDK</h2>
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            仅展示成功换绑超过 5 次的多设备 CDK，失败验证和普通校验不计入。
+            仅展示成功换绑超过 5 次且换绑次数大于历史机器数的多设备 CDK，失败验证和普通校验不计入。
           </p>
         </div>
 
