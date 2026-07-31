@@ -475,3 +475,36 @@ Reduced the feedback table to content and actions, moved type, related informati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: 优化多设备 CDK 查询
+
+**Date**: 2026-08-01
+**Task**: 优化多设备 CDK 查询
+**Branch**: `main`
+
+### Summary
+
+保留换绑次数大于 5 的门槛，并增加换绑次数严格大于历史机器数的后端聚合过滤；同步前端说明、API 文档、测试与项目规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b78cf2a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
