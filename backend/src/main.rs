@@ -7,6 +7,7 @@ mod hash_sync;
 mod kdocs;
 mod middleware;
 mod models;
+mod usage;
 
 use std::sync::Arc;
 
@@ -43,6 +44,7 @@ async fn main() {
         hash_sync: hash_sync.clone(),
     };
     hash_sync.spawn_schedule();
+    usage::spawn_retention_cleanup(state.db.clone());
 
     let cors = CorsLayer::new()
         .allow_origin(Any)

@@ -25,6 +25,31 @@ CREATE TABLE IF NOT EXISTS cdkeys (
     INDEX idx_created_by (created_by)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS usage_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    machine_code VARCHAR(256) NOT NULL,
+    cdk_code VARCHAR(64) NOT NULL,
+    action VARCHAR(20) NOT NULL,
+    created_by BIGINT NULL,
+    created_at DATETIME DEFAULT NOW(),
+    INDEX idx_ul_machine (machine_code),
+    INDEX idx_ul_created_at (created_at),
+    INDEX idx_ul_created_by (created_by)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS cdk_usage_daily (
+    created_by BIGINT NOT NULL,
+    machine_code VARCHAR(256) NOT NULL,
+    usage_date DATE NOT NULL,
+    duration_seconds BIGINT NOT NULL DEFAULT 0,
+    first_active DATETIME NOT NULL,
+    last_active DATETIME NOT NULL,
+    updated_at DATETIME DEFAULT NOW() ON UPDATE NOW(),
+    PRIMARY KEY (created_by, machine_code, usage_date),
+    INDEX idx_cud_owner_date (created_by, usage_date),
+    INDEX idx_cud_usage_date (usage_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS cdk_binding_history (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     cdk_id BIGINT NOT NULL,

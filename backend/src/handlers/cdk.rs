@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::net::IpAddr;
 
 use axum::extract::{Path, Query, State};
@@ -7,9 +8,11 @@ use chrono::Utc;
 use rand::Rng;
 use semver::Version;
 
+use crate::cdk_events::CdkInvalidationReason;
 use crate::errors::AppError;
 use crate::middleware::auth::Claims;
 use crate::models::cdk::*;
+use crate::usage::{china_date, persist_intervals_best_effort, split_interval};
 use crate::AppState;
 
 const BINDING_HISTORY_DEFAULT_PAGE_SIZE: u32 = 50;
@@ -42,7 +45,7 @@ pub async fn usage_stats(
         .fetch_one(&state.db)
         .await?;
 
-    let days = params.days.unwrap_or(30).max(1).min(365);
+    let days = params.days.unwrap_or(30).clamp(1, 365);
     let now = Utc::now().naive_utc();
     let since = now - chrono::Duration::days(days as i64);
     let today_str = now.format("%Y-%m-%d").to_string();
@@ -167,16 +170,17 @@ pub async fn machine_usage(
         .fetch_one(&state.db)
         .await?;
 
-    let days = params.days.unwrap_or(30).max(1).min(365);
-    let since = Utc::now().naive_utc() - chrono::Duration::days(days as i64);
+    let days = params.days.unwrap_or(30).clamp(1, 365);
+    let now = Utc::now();
+    let since = now.naive_utc() - chrono::Duration::days(days as i64);
+    let first_usage_date = china_date(now) - chrono::Duration::days(days as i64);
 
-    let daily_rows: Vec<(String, i64, chrono::NaiveDateTime, chrono::NaiveDateTime)> =
+    let request_rows: Vec<(String, i64, chrono::NaiveDateTime, chrono::NaiveDateTime)> =
         sqlx::query_as(
-            "SELECT DATE_FORMAT(created_at, '%Y-%m-%d'), COUNT(*), \
-         MIN(created_at), MAX(created_at) \
+            "SELECT DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+08:00'), '%Y-%m-%d'), \
+         COUNT(*), MIN(created_at), MAX(created_at) \
          FROM usage_logs WHERE created_by = ? AND machine_code = ? AND created_at >= ? \
-         GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d') \
-         ORDER BY DATE_FORMAT(created_at, '%Y-%m-%d') DESC",
+         GROUP BY DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+08:00'), '%Y-%m-%d')",
         )
         .bind(user_id.0)
         .bind(&params.machine_code)
@@ -184,19 +188,70 @@ pub async fn machine_usage(
         .fetch_all(&state.db)
         .await?;
 
-    let daily_usage: Vec<serde_json::Value> = daily_rows
+    let aggregate_rows: Vec<(
+        chrono::NaiveDate,
+        i64,
+        chrono::NaiveDateTime,
+        chrono::NaiveDateTime,
+    )> = sqlx::query_as(
+        "SELECT usage_date, duration_seconds, first_active, last_active \
+         FROM cdk_usage_daily \
+         WHERE created_by = ? AND machine_code = ? AND usage_date >= ?",
+    )
+    .bind(user_id.0)
+    .bind(&params.machine_code)
+    .bind(first_usage_date)
+    .fetch_all(&state.db)
+    .await?;
+
+    let mut daily = BTreeMap::<String, DailyUsageAccumulator>::new();
+    for (date, requests, first_active, last_active) in request_rows {
+        let item = daily.entry(date).or_default();
+        item.requests = requests;
+        item.request_first = Some(first_active);
+        item.request_last = Some(last_active);
+    }
+    for (date, duration_seconds, first_active, last_active) in aggregate_rows {
+        let item = daily.entry(date.to_string()).or_default();
+        item.duration_seconds = Some(duration_seconds);
+        item.aggregate_first = Some(first_active);
+        item.aggregate_last = Some(last_active);
+    }
+    if let Some(pending) = state
+        .cdk_connections
+        .pending_usage(user_id.0, &params.machine_code, now)
+    {
+        for segment in split_interval(pending.started_at, pending.ended_at) {
+            let item = daily.entry(segment.usage_date.to_string()).or_default();
+            item.duration_seconds =
+                Some(item.duration_seconds.unwrap_or_default() + segment.duration_seconds);
+            merge_earliest(&mut item.aggregate_first, segment.first_active.naive_utc());
+            merge_latest(&mut item.aggregate_last, segment.last_active.naive_utc());
+        }
+    }
+
+    let daily_usage = daily
         .into_iter()
-        .map(|r| {
-            let duration_minutes = (r.3 - r.2).num_minutes();
+        .rev()
+        .map(|(date, item)| {
+            let first_active = earliest(item.request_first, item.aggregate_first);
+            let last_active = latest(item.request_last, item.aggregate_last);
+            let duration_minutes = item
+                .duration_seconds
+                .map(|seconds| seconds / 60)
+                .unwrap_or_else(|| match (item.request_first, item.request_last) {
+                    (Some(first), Some(last)) => (last - first).num_minutes(),
+                    _ => 0,
+                });
             serde_json::json!({
-                "date": r.0,
-                "requests": r.1,
-                "first_active": r.2,
-                "last_active": r.3,
+                "date": date,
+                "requests": item.requests,
+                "first_active": first_active,
+                "last_active": last_active,
                 "duration_minutes": duration_minutes,
             })
         })
-        .collect();
+        .collect::<Vec<_>>();
 
     let cdk_rows: Vec<(String, i64, chrono::NaiveDateTime)> = sqlx::query_as(
         "SELECT cdk_code, COUNT(*), MAX(created_at) \
@@ -228,6 +283,44 @@ pub async fn machine_usage(
             "cdks": cdks,
         },
     })))
+}
+
+#[derive(Default)]
+struct DailyUsageAccumulator {
+    requests: i64,
+    request_first: Option<chrono::NaiveDateTime>,
+    request_last: Option<chrono::NaiveDateTime>,
+    duration_seconds: Option<i64>,
+    aggregate_first: Option<chrono::NaiveDateTime>,
+    aggregate_last: Option<chrono::NaiveDateTime>,
+}
+
+fn merge_earliest(target: &mut Option<chrono::NaiveDateTime>, value: chrono::NaiveDateTime) {
+    *target = Some(target.map_or(value, |current| current.min(value)));
+}
+
+fn merge_latest(target: &mut Option<chrono::NaiveDateTime>, value: chrono::NaiveDateTime) {
+    *target = Some(target.map_or(value, |current| current.max(value)));
+}
+
+fn earliest(
+    first: Option<chrono::NaiveDateTime>,
+    second: Option<chrono::NaiveDateTime>,
+) -> Option<chrono::NaiveDateTime> {
+    match (first, second) {
+        (Some(first), Some(second)) => Some(first.min(second)),
+        (first, second) => first.or(second),
+    }
+}
+
+fn latest(
+    first: Option<chrono::NaiveDateTime>,
+    second: Option<chrono::NaiveDateTime>,
+) -> Option<chrono::NaiveDateTime> {
+    match (first, second) {
+        (Some(first), Some(second)) => Some(first.max(second)),
+        (first, second) => first.or(second),
+    }
 }
 
 fn generate_license_key() -> String {
@@ -755,9 +848,13 @@ async fn activate_for_owner(
             tx.commit().await?;
 
             if let Some(old_machine_code) = row.machine_code.as_deref() {
-                state
-                    .cdk_connections
-                    .invalidate_binding(owner_id, row.id, old_machine_code);
+                let outcome = state.cdk_connections.invalidate_binding(
+                    owner_id,
+                    row.id,
+                    old_machine_code,
+                    CdkInvalidationReason::Rebound,
+                );
+                persist_intervals_best_effort(&state.db, &outcome.usage_intervals).await;
             }
 
             return Ok(Json(serde_json::json!({
@@ -935,16 +1032,39 @@ pub async fn disable(
         .fetch_one(&state.db)
         .await?;
 
-    let result = sqlx::query(
-        "UPDATE cdkeys SET status = 'disabled' WHERE code = ? AND status != 'disabled' AND created_by = ?"
+    let mut tx = state.db.begin().await?;
+    let cdk = sqlx::query_as::<_, (i64, Option<String>)>(
+        "SELECT id, machine_code FROM cdkeys \
+         WHERE code = ? AND status != 'disabled' AND created_by = ? FOR UPDATE",
     )
     .bind(&payload.code)
     .bind(user_id.0)
-    .execute(&state.db)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| AppError::NotFound("CDK 不存在或已被禁用".to_string()))?;
+
+    let result = sqlx::query(
+        "UPDATE cdkeys SET status = 'disabled' \
+         WHERE id = ? AND status != 'disabled' AND created_by = ?",
+    )
+    .bind(cdk.0)
+    .bind(user_id.0)
+    .execute(&mut *tx)
     .await?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("CDK 不存在或已被禁用".to_string()));
+    }
+    tx.commit().await?;
+
+    if let Some(machine_code) = cdk.1 {
+        let outcome = state.cdk_connections.invalidate_binding(
+            user_id.0,
+            cdk.0,
+            &machine_code,
+            CdkInvalidationReason::Disabled,
+        );
+        persist_intervals_best_effort(&state.db, &outcome.usage_intervals).await;
     }
 
     Ok(Json(serde_json::json!({

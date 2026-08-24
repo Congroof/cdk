@@ -5,9 +5,11 @@ use axum::extract::{Path, State, WebSocketUpgrade};
 use axum::http::header::AUTHORIZATION;
 use axum::http::HeaderMap;
 use axum::response::Response;
+use chrono::{DateTime, NaiveDateTime, Utc};
 
-use crate::cdk_events::{CdkConnectionCommand, CdkConnectionKey};
+use crate::cdk_events::{CdkConnectionCommand, CdkConnectionKey, CdkInvalidationReason};
 use crate::errors::AppError;
+use crate::usage::{persist_interval, persist_intervals_best_effort, USAGE_CHECKPOINT_INTERVAL};
 use crate::AppState;
 
 const MACHINE_HEADER: &str = "x-skinforge-machine";
@@ -34,14 +36,16 @@ pub async fn connect(
         .ok_or_else(connection_denied)?
         .0;
 
-    let binding = sqlx::query_as::<_, (i64,)>(
-        "SELECT id FROM cdkeys \
+    let now = Utc::now().naive_utc();
+    let binding = sqlx::query_as::<_, (i64, NaiveDateTime)>(
+        "SELECT id, expires_at FROM cdkeys \
          WHERE code = ? AND created_by = ? AND status = 'activated' \
-         AND machine_code = ? AND (expires_at IS NULL OR expires_at >= NOW())",
+         AND machine_code = ? AND expires_at IS NOT NULL AND expires_at >= ?",
     )
     .bind(cdk)
     .bind(owner_id)
     .bind(machine_code)
+    .bind(now)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(connection_denied)?;
@@ -112,21 +116,24 @@ async fn handle_socket(
     // Close the gap between the pre-upgrade DB check and registry insertion.
     // If a rebind committed before this connection was registered, this second
     // check observes it. If it commits afterwards, the registry sees this entry.
-    let binding_is_current = sqlx::query_as::<_, (i64,)>(
-        "SELECT id FROM cdkeys \
-         WHERE id = ? AND created_by = ? AND status = 'activated' \
-         AND machine_code = ? AND (expires_at IS NULL OR expires_at >= NOW())",
+    let current_expiry = sqlx::query_as::<_, (NaiveDateTime,)>(
+        "SELECT c.expires_at FROM cdkeys c \
+         WHERE c.id = ? AND c.created_by = ? AND c.status = 'activated' \
+         AND c.machine_code = ? AND c.expires_at IS NOT NULL AND c.expires_at >= ? \
+         AND NOT EXISTS (SELECT 1 FROM banned_machines b \
+             WHERE b.created_by = c.created_by AND b.machine_code = c.machine_code)",
     )
     .bind(key.cdk_id)
     .bind(key.owner_id)
     .bind(&key.machine_code)
+    .bind(Utc::now().naive_utc())
     .fetch_optional(&db)
     .await
     .ok()
     .flatten()
-    .is_some();
-    if !binding_is_current {
-        registry.remove(&key, registration.connection_id);
+    .map(|row| row.0);
+    let Some(mut expires_at) = current_expiry else {
+        persist_removed_tail(&registry, &db, &key, registration.connection_id).await;
         let _ = socket
             .send(Message::Close(Some(CloseFrame {
                 code: 1008,
@@ -134,14 +141,38 @@ async fn handle_socket(
             })))
             .await;
         return;
-    }
+    };
 
     let mut heartbeat = tokio::time::interval(HEARTBEAT_INTERVAL);
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut last_pong = Instant::now();
+    let expiry_sleep = tokio::time::sleep_until(expiry_deadline(expires_at));
+    tokio::pin!(expiry_sleep);
 
     loop {
         tokio::select! {
+            _ = &mut expiry_sleep => {
+                match refresh_binding_expiry(&db, &key).await {
+                    Ok(BindingExpiry::Valid(new_expires_at)) => {
+                        expires_at = new_expires_at;
+                        expiry_sleep.as_mut().reset(expiry_deadline(expires_at));
+                    }
+                    Ok(BindingExpiry::Invalid(reason)) => {
+                        let outcome = registry.invalidate_binding(
+                            key.owner_id,
+                            key.cdk_id,
+                            &key.machine_code,
+                            reason,
+                        );
+                        persist_intervals_best_effort(&db, &outcome.usage_intervals).await;
+                        expiry_sleep.as_mut().reset(tokio::time::Instant::now() + HEARTBEAT_TIMEOUT);
+                    }
+                    Err(error) => {
+                        tracing::error!("Refresh CDK expiry failed: {}", error);
+                        expiry_sleep.as_mut().reset(tokio::time::Instant::now() + HEARTBEAT_TIMEOUT);
+                    }
+                }
+            }
             _ = heartbeat.tick() => {
                 if last_pong.elapsed() >= HEARTBEAT_TIMEOUT {
                     break;
@@ -166,8 +197,12 @@ async fn handle_socket(
             }
             message = socket.recv() => {
                 match message {
-                    Some(Ok(Message::Pong(_))) => last_pong = Instant::now(),
+                    Some(Ok(Message::Pong(_))) => {
+                        last_pong = Instant::now();
+                        persist_checkpoint(&registry, &db, &key).await;
+                    }
                     Some(Ok(Message::Ping(payload))) => {
+                        persist_checkpoint(&registry, &db, &key).await;
                         if socket.send(Message::Pong(payload)).await.is_err() {
                             break;
                         }
@@ -185,7 +220,136 @@ async fn handle_socket(
         }
     }
 
-    registry.remove(&key, registration.connection_id);
+    persist_removed_tail(&registry, &db, &key, registration.connection_id).await;
+}
+
+enum BindingExpiry {
+    Valid(NaiveDateTime),
+    Invalid(CdkInvalidationReason),
+}
+
+async fn refresh_binding_expiry(
+    db: &sqlx::MySqlPool,
+    key: &CdkConnectionKey,
+) -> Result<BindingExpiry, sqlx::Error> {
+    let row = sqlx::query_as::<_, (String, Option<String>, Option<NaiveDateTime>, i64)>(
+        "SELECT c.status, c.machine_code, c.expires_at, \
+         EXISTS(SELECT 1 FROM banned_machines b \
+             WHERE b.created_by = c.created_by AND b.machine_code = c.machine_code) \
+         FROM cdkeys c WHERE c.id = ? AND c.created_by = ?",
+    )
+    .bind(key.cdk_id)
+    .bind(key.owner_id)
+    .fetch_optional(db)
+    .await?;
+
+    let Some((status, machine_code, expires_at, banned)) = row else {
+        return Ok(BindingExpiry::Invalid(CdkInvalidationReason::Invalid));
+    };
+    if banned != 0 {
+        return Ok(BindingExpiry::Invalid(CdkInvalidationReason::Banned));
+    }
+    if status == "disabled" {
+        return Ok(BindingExpiry::Invalid(CdkInvalidationReason::Disabled));
+    }
+    if machine_code.as_deref() != Some(key.machine_code.as_str()) {
+        return Ok(BindingExpiry::Invalid(CdkInvalidationReason::Rebound));
+    }
+    if status != "activated" {
+        let reason = if status == "expired" {
+            CdkInvalidationReason::Expired
+        } else {
+            CdkInvalidationReason::Invalid
+        };
+        return Ok(BindingExpiry::Invalid(reason));
+    }
+
+    let Some(expires_at) = expires_at else {
+        return Ok(BindingExpiry::Invalid(CdkInvalidationReason::Invalid));
+    };
+    if expires_at > Utc::now().naive_utc() {
+        return Ok(BindingExpiry::Valid(expires_at));
+    }
+
+    let result = sqlx::query(
+        "UPDATE cdkeys SET status = 'expired' \
+         WHERE id = ? AND created_by = ? AND status = 'activated' AND expires_at <= ?",
+    )
+    .bind(key.cdk_id)
+    .bind(key.owner_id)
+    .bind(Utc::now().naive_utc())
+    .execute(db)
+    .await?;
+    if result.rows_affected() > 0 {
+        return Ok(BindingExpiry::Invalid(CdkInvalidationReason::Expired));
+    }
+
+    let refreshed = sqlx::query_as::<_, (String, Option<String>, Option<NaiveDateTime>)>(
+        "SELECT status, machine_code, expires_at FROM cdkeys WHERE id = ? AND created_by = ?",
+    )
+    .bind(key.cdk_id)
+    .bind(key.owner_id)
+    .fetch_optional(db)
+    .await?;
+    match refreshed {
+        Some((status, machine_code, Some(expires_at)))
+            if status == "activated"
+                && machine_code.as_deref() == Some(key.machine_code.as_str())
+                && expires_at > Utc::now().naive_utc() =>
+        {
+            Ok(BindingExpiry::Valid(expires_at))
+        }
+        Some((status, _, _)) if status == "disabled" => {
+            Ok(BindingExpiry::Invalid(CdkInvalidationReason::Disabled))
+        }
+        Some((status, _, _)) if status == "expired" => {
+            Ok(BindingExpiry::Invalid(CdkInvalidationReason::Expired))
+        }
+        Some((_, machine_code, _))
+            if machine_code.as_deref() != Some(key.machine_code.as_str()) =>
+        {
+            Ok(BindingExpiry::Invalid(CdkInvalidationReason::Rebound))
+        }
+        _ => Ok(BindingExpiry::Invalid(CdkInvalidationReason::Invalid)),
+    }
+}
+
+fn expiry_deadline(expires_at: NaiveDateTime) -> tokio::time::Instant {
+    let expires_at = DateTime::<Utc>::from_naive_utc_and_offset(expires_at, Utc);
+    let remaining = expires_at
+        .signed_duration_since(Utc::now())
+        .to_std()
+        .unwrap_or(Duration::ZERO);
+    tokio::time::Instant::now() + remaining
+}
+
+async fn persist_checkpoint(
+    registry: &crate::cdk_events::CdkConnectionRegistry,
+    db: &sqlx::MySqlPool,
+    key: &CdkConnectionKey,
+) {
+    let Some(interval) = registry.checkpoint_usage(key, Utc::now(), USAGE_CHECKPOINT_INTERVAL)
+    else {
+        return;
+    };
+    if let Err(error) = persist_interval(db, &interval).await {
+        tracing::error!("Persist CDK usage checkpoint failed: {}", error);
+        registry.restore_checkpoint(&interval);
+    }
+}
+
+async fn persist_removed_tail(
+    registry: &crate::cdk_events::CdkConnectionRegistry,
+    db: &sqlx::MySqlPool,
+    key: &CdkConnectionKey,
+    connection_id: uuid::Uuid,
+) {
+    let Some(interval) = registry.remove(key, connection_id) else {
+        return;
+    };
+    if let Err(error) = persist_interval(db, &interval).await {
+        tracing::error!("Persist final CDK usage interval failed: {}", error);
+    }
 }
 
 #[cfg(test)]

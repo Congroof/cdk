@@ -65,6 +65,23 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
   durable message queue, and no cross-instance delivery. Keep the explicit 8KB
   buffers: Tungstenite otherwise eagerly allocates its 128KB default read buffer
   for every idle socket.
+- The WebSocket handshake requires a non-null future `expires_at`. Each accepted
+  socket owns a Tokio deadline for that timestamp; when it fires, re-read the
+  binding once. A concurrent extension resets the deadline, while expiration,
+  disable, rebind, or ban emits the existing v1 envelope with reason
+  `expired` / `disabled` / `rebound` / `banned` and closes every targeted socket.
+  Do not replace this with fixed-interval per-connection CDK queries.
+- Online duration is deduplicated by `(owner_id, machine_code)`, even though
+  invalidation and online-device counting remain keyed by
+  `(owner_id, cdk_id, machine_code)`. The first socket starts usage and the last
+  socket ends it; overlapping reconnects never double-count time.
+- Pong handling checkpoints at most once per device every five minutes into
+  `cdk_usage_daily`. Store one additive row per owner/machine/Asia-Shanghai day,
+  split intervals at China midnight, flush the final tail on disconnect, and
+  expose the unpersisted in-memory tail in `machine-usage`. Never persist each
+  Ping/Pong or infer new online duration from `usage_logs` request gaps.
+- `cdk_usage_daily` and `usage_logs` retain 365 days. Schema changes remain
+  synchronized in `db.rs`, numbered migrations, and MySQL init SQL.
 - Nginx terminates the public connection and opens a separate upstream connection,
   so one proxied WebSocket consumes roughly two Nginx connection slots. The image
   must raise Debian's packaged `worker_connections 768` default to 8192 and fail
@@ -138,6 +155,10 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
 | CDK > 64 chars or HWID > 256 chars | HTTP 400 |
 | unknown tenant/binding, wrong machine, disabled/expired CDK | WebSocket 401 without detail |
 | banned current machine | WebSocket 401 / activation error |
+| connected CDK reaches `expires_at` without extension | `expired` event and close at deadline |
+| connected CDK is extended before its old deadline check commits | deadline resets to new expiry |
+| admin disables an online CDK | commit, `disabled` event, close, final usage flush |
+| admin bans an online machine | insert ban, `banned` event, close, final usage flush |
 | same-machine activation | existing success response; no new history/event |
 | history insert fails | transaction rolls back; no success/event |
 | registry at 3000 | upgrade closes with 1013; no registry growth |
@@ -216,6 +237,11 @@ Required process nofile:      greater than 2 * expected proxied WebSockets
   deserialize; a complete request preserves the nested activation payload.
 - Protocol serialization: assert v1/type/reason and absence of credential fields.
 - Registry: targeted multi-connection invalidation, idempotent cleanup, and 3000 cap.
+- Registry usage: overlapping sockets and different CDKs on one machine count
+  one interval; five-minute checkpoints rate-limit writes; failed checkpoints
+  can restore the in-memory cursor.
+- Usage interval unit tests: empty/reversed intervals and Asia/Shanghai midnight
+  splitting. Database integration should assert additive upsert and 365-day cleanup.
 - Integration race: pause between pre-upgrade validation and registry insertion,
   commit a rebind, then assert the post-upgrade check closes the stale socket.
 - Header parsing: required/bounded credentials and literal IPv4/IPv6 `X-Real-IP`.

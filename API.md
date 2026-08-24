@@ -98,7 +98,7 @@ X-SkinForge-Machine: <HWID>
 Upgrade: websocket
 ```
 
-服务端只允许当前处于 `activated`、未过期、未禁用且机器码一致的绑定升级连接。CDK 被成功换绑后，旧机器连接会收到以下事件并由服务端关闭：
+服务端只允许当前处于 `activated`、未过期、未禁用且机器码一致的绑定升级连接。CDK 被成功换绑、禁用、自然过期或机器被封禁后，对应连接会收到以下事件并由服务端关闭：
 
 ```json
 {
@@ -106,11 +106,15 @@ Upgrade: websocket
   "eventId": "uuid",
   "type": "cdkBindingInvalidated",
   "occurredAt": "2026-07-21T12:00:00Z",
-  "payload": { "reason": "rebound" }
+  "payload": { "reason": "expired" }
 }
 ```
 
-事件不包含 CDK、机器码或 IP。服务端每 30 秒发送 Ping，单消息上限 64KB，全局连接上限 3000。当前生产链路为 `ws://` 明文连接，不能抵御网络监听或篡改；部署时必须先启用 Nginx Upgrade 转发，再发布依赖该通道的客户端。
+`payload.reason` 可为 `rebound`、`expired`、`disabled`、`banned` 或 `invalid`。
+事件不包含 CDK、机器码或 IP。服务端每 30 秒发送 Ping，单消息上限 64KB，全局连接上限 3000。
+连接建立时服务端按 `expires_at` 设置到期 deadline；到点只查询一次数据库以确认是否已续期，
+未续期则立即失效，而不是依靠客户端重启。当前生产链路为 `ws://` 明文连接，不能抵御网络监听或篡改；
+部署时必须先启用 Nginx Upgrade 转发，再发布依赖该通道的客户端。
 
 ---
 
@@ -518,6 +522,58 @@ curl -X GET "http://localhost/api/cdk/export?status=activated&date_from=2026-05-
   }
 }
 ```
+
+---
+
+## CDK 使用统计
+
+### `GET /api/cdk/usage-stats`
+
+查询最近 1～365 天的设备、HTTP 校验请求和每日趋势。Query 参数：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| days | number | 否 | 查询天数，默认 30，限制 1～365 |
+| search | string | 否 | 按机器码模糊搜索 |
+
+### `GET /api/cdk/machine-usage`
+
+查询单台设备的每日在线时长和关联 CDK。Query 参数：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| machine_code | string | 是 | 机器码 |
+| days | number | 否 | 查询天数，默认 30，限制 1～365 |
+
+```json
+{
+  "success": true,
+  "data": {
+    "machine_code": "MACHINE-001",
+    "daily_usage": [
+      {
+        "date": "2026-08-24",
+        "requests": 2,
+        "first_active": "2026-08-24T11:17:00",
+        "last_active": "2026-08-24T14:47:00",
+        "duration_minutes": 210
+      }
+    ],
+    "cdks": [
+      {
+        "code": "A1B2C-D3E4F-G5H6I-J7K8L-M9N0P",
+        "requests": 2,
+        "last_used": "2026-08-24T11:23:00"
+      }
+    ]
+  }
+}
+```
+
+`duration_minutes` 是授权 WebSocket 保持在线的累计时长：同一设备的重叠连接只累计一次，
+跨 Asia/Shanghai 午夜时按自然日拆分。服务端每 5 分钟最多聚合落库一次，查询时叠加尚未落库的
+当前在线尾段；不保存逐条 Ping/Pong。历史日期尚无聚合数据时，临时回退到旧的 HTTP 请求首末时间差。
+每日聚合和 `usage_logs` 保留 365 天。
 
 ---
 

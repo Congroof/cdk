@@ -1,9 +1,11 @@
 use axum::extract::{Query, State};
 use axum::{Extension, Json};
 
+use crate::cdk_events::CdkInvalidationReason;
 use crate::errors::AppError;
 use crate::middleware::auth::Claims;
 use crate::models::banned::*;
+use crate::usage::persist_intervals_best_effort;
 use crate::AppState;
 
 pub async fn ban(
@@ -37,6 +39,13 @@ pub async fn ban(
         .bind(user_id.0)
         .execute(&state.db)
         .await?;
+
+    let outcome = state.cdk_connections.invalidate_machine(
+        user_id.0,
+        &payload.machine_code,
+        CdkInvalidationReason::Banned,
+    );
+    persist_intervals_best_effort(&state.db, &outcome.usage_intervals).await;
 
     Ok(Json(serde_json::json!({
         "success": true,
