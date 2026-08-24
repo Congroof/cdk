@@ -508,3 +508,36 @@ Reduced the feedback table to content and actions, moved type, related informati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: 修复 CDK 过期校验与使用时长统计
+
+**Date**: 2026-08-24
+**Task**: 修复 CDK 过期校验与使用时长统计
+**Branch**: `main`
+
+### Summary
+
+服务端按到期时间主动失效在线连接，聚合每日在线时长并保留 365 天，同时让管理统计合并当前在线尾段。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0d54029` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
