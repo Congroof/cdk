@@ -1,4 +1,4 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
@@ -9,14 +9,17 @@ use crate::errors::AppError;
 use crate::kdocs::{cookie_hint, KdocsSettings};
 use crate::middleware::auth::Claims;
 use crate::models::skinforge::{
-    HashReleaseRow, KdocsSettingsView, PublicHashArtifact, PublicHashArtifacts, PublicHashRelease,
-    SaveKdocsSettingsRequest, SaveReleaseRequest, SkinforgeRelease,
+    HashReleaseRow, KdocsSettingsView, ModListQuery, PublicHashArtifact, PublicHashArtifacts,
+    PublicHashRelease, SaveKdocsSettingsRequest, SaveModRequest, SaveReleaseRequest,
+    SkinforgeModListItem, SkinforgeModRow, SkinforgeRelease,
 };
 use crate::AppState;
 
 const RELEASE_SCHEMA_VERSION: u32 = 1;
 const RELEASE_PRODUCT: &str = "skinforge";
 const RELEASE_PLATFORM: &str = "windows-x86_64";
+const MOD_SCHEMA_VERSION: u32 = 1;
+const MOD_PRODUCT: &str = "skinforge-mod";
 const MAX_NOTES_LEN: usize = 20_000;
 
 pub async fn get_kdocs_settings(
@@ -220,6 +223,121 @@ pub async fn updater(
     .into_response())
 }
 
+pub async fn list_mods(
+    State(state): State<AppState>,
+    Query(params): Query<ModListQuery>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    mod_list_response(&state, params).await
+}
+
+pub async fn save_mod(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(payload): Json<SaveModRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let validated = validate_mod_request(&payload)?;
+    let settings = state
+        .kdocs
+        .load_settings(&state.db)
+        .await
+        .map_err(AppError::BadRequest)?;
+    if validated.group_id != settings.group_id || validated.parent_id != settings.parent_id {
+        return Err(AppError::BadRequest(
+            "MOD 清单的云文档目录与当前服务端配置不一致".to_string(),
+        ));
+    }
+
+    let duplicate: Option<(u8,)> =
+        sqlx::query_as("SELECT 1 FROM skinforge_mods WHERE file_id = ? AND link_id = ? LIMIT 1")
+            .bind(validated.file_id)
+            .bind(payload.manifest.artifact.link_id.trim())
+            .fetch_optional(&state.db)
+            .await?;
+    if duplicate.is_some() {
+        return Err(AppError::Conflict("该 MOD 文件已导入".to_string()));
+    }
+
+    let download_url = state
+        .kdocs
+        .resolve_download_url(
+            &state.db,
+            validated.file_id,
+            payload.manifest.artifact.link_id.trim(),
+        )
+        .await
+        .map_err(AppError::BadRequest)?;
+    state
+        .kdocs
+        .probe_download_url(&download_url)
+        .await
+        .map_err(AppError::BadRequest)?;
+
+    let user_id = current_user_id(&state, &claims.sub).await?;
+    let result = sqlx::query(
+        "INSERT INTO skinforge_mods (
+            category, file_id, link_id, link_url, file_name, file_size, created_by
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(validated.category)
+    .bind(validated.file_id)
+    .bind(payload.manifest.artifact.link_id.trim())
+    .bind(payload.manifest.artifact.link_url.as_deref())
+    .bind(payload.manifest.artifact.file_name.trim())
+    .bind(payload.manifest.artifact.file_size)
+    .bind(user_id)
+    .execute(&state.db)
+    .await
+    .map_err(map_mod_insert_error)?;
+
+    let item = fetch_mod(&state, result.last_insert_id()).await?;
+    Ok(Json(serde_json::json!({ "success": true, "data": item })))
+}
+
+pub async fn delete_mod(
+    State(state): State<AppState>,
+    Path(id): Path<u64>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let result = sqlx::query("DELETE FROM skinforge_mods WHERE id = ?")
+        .bind(id)
+        .execute(&state.db)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("MOD 不存在".to_string()));
+    }
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": { "deleted": true }
+    })))
+}
+
+pub async fn public_mods(
+    State(state): State<AppState>,
+    Query(params): Query<ModListQuery>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    mod_list_response(&state, params).await
+}
+
+pub async fn mod_download_url(
+    State(state): State<AppState>,
+    Path(id): Path<u64>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let row: Option<(u64, String)> =
+        sqlx::query_as("SELECT file_id, link_id FROM skinforge_mods WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&state.db)
+            .await?;
+    let (file_id, link_id) = row.ok_or_else(|| AppError::NotFound("MOD 不存在".to_string()))?;
+    let url = state
+        .kdocs
+        .resolve_download_url(&state.db, file_id, &link_id)
+        .await
+        .map_err(AppError::ServiceUnavailable)?;
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": { "url": url }
+    })))
+}
+
 pub async fn get_hash_status(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, AppError> {
@@ -314,6 +432,91 @@ async fn fetch_release(state: &AppState) -> Result<Option<SkinforgeRelease>, App
     .map_err(AppError::from)
 }
 
+async fn fetch_mod(state: &AppState, id: u64) -> Result<SkinforgeModListItem, AppError> {
+    let row = sqlx::query_as::<_, SkinforgeModRow>(
+        "SELECT id, category, file_name, file_size, created_at
+         FROM skinforge_mods WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("MOD 不存在".to_string()))?;
+    Ok(row.into())
+}
+
+async fn mod_list_response(
+    state: &AppState,
+    params: ModListQuery,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let (page, page_size, offset) = mod_pagination(&params);
+    let category = params
+        .category
+        .as_deref()
+        .map(parse_mod_category)
+        .transpose()?;
+
+    let (total, rows): (u64, Vec<SkinforgeModRow>) = if let Some(category) = category {
+        let (total,): (u64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM skinforge_mods WHERE category = ?")
+                .bind(category)
+                .fetch_one(&state.db)
+                .await?;
+        let rows = sqlx::query_as::<_, SkinforgeModRow>(
+            "SELECT id, category, file_name, file_size, created_at
+             FROM skinforge_mods WHERE category = ?
+             ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+        )
+        .bind(category)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await?;
+        (total, rows)
+    } else {
+        let (total,): (u64,) = sqlx::query_as("SELECT COUNT(*) FROM skinforge_mods")
+            .fetch_one(&state.db)
+            .await?;
+        let rows = sqlx::query_as::<_, SkinforgeModRow>(
+            "SELECT id, category, file_name, file_size, created_at
+             FROM skinforge_mods
+             ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+        )
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await?;
+        (total, rows)
+    };
+    let items: Vec<SkinforgeModListItem> = rows.into_iter().map(Into::into).collect();
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size
+        }
+    })))
+}
+
+fn mod_pagination(params: &ModListQuery) -> (u32, u32, u64) {
+    let page = params.page.unwrap_or(1).max(1);
+    let page_size = params.page_size.unwrap_or(10).clamp(1, 50);
+    let offset = u64::from(page - 1) * u64::from(page_size);
+    (page, page_size, offset)
+}
+
+fn map_mod_insert_error(error: sqlx::Error) -> AppError {
+    if error
+        .as_database_error()
+        .is_some_and(|database_error| database_error.is_unique_violation())
+    {
+        AppError::Conflict("该 MOD 文件已导入".to_string())
+    } else {
+        AppError::from(error)
+    }
+}
+
 async fn current_user_id(state: &AppState, username: &str) -> Result<i64, AppError> {
     let (user_id,): (i64,) = sqlx::query_as("SELECT id FROM users WHERE username = ?")
         .bind(username)
@@ -327,6 +530,48 @@ struct ValidatedRelease {
     file_id: u64,
     group_id: u64,
     parent_id: u64,
+}
+
+struct ValidatedMod {
+    category: &'static str,
+    file_id: u64,
+    group_id: u64,
+    parent_id: u64,
+}
+
+fn validate_mod_request(payload: &SaveModRequest) -> Result<ValidatedMod, AppError> {
+    let manifest = &payload.manifest;
+    if manifest.schema_version != MOD_SCHEMA_VERSION || manifest.product != MOD_PRODUCT {
+        return Err(AppError::BadRequest(
+            "MOD 清单 schema 或 product 不受支持".to_string(),
+        ));
+    }
+    if manifest.artifact.link_id.trim().is_empty() {
+        return Err(AppError::BadRequest("link_id 不能为空".to_string()));
+    }
+    if manifest.artifact.file_name.trim().is_empty() {
+        return Err(AppError::BadRequest("文件名不能为空".to_string()));
+    }
+    if manifest.artifact.file_size == 0 {
+        return Err(AppError::BadRequest("文件大小必须大于 0".to_string()));
+    }
+    Ok(ValidatedMod {
+        category: parse_mod_category(&manifest.category)?,
+        file_id: parse_positive_id(&manifest.artifact.file_id, "file_id")?,
+        group_id: parse_positive_id(&manifest.artifact.group_id, "group_id")?,
+        parent_id: parse_positive_id(&manifest.artifact.parent_id, "parent_id")?,
+    })
+}
+
+fn parse_mod_category(value: &str) -> Result<&'static str, AppError> {
+    match value.trim() {
+        "map" => Ok("map"),
+        "skin" => Ok("skin"),
+        "accessory" => Ok("accessory"),
+        _ => Err(AppError::BadRequest(
+            "MOD 分类必须是 map、skin 或 accessory".to_string(),
+        )),
+    }
 }
 
 fn validate_release_request(payload: &SaveReleaseRequest) -> Result<ValidatedRelease, AppError> {
@@ -394,7 +639,9 @@ fn valid_hex(value: &str, length: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::skinforge::{ReleaseManifest, ReleaseManifestArtifact};
+    use crate::models::skinforge::{
+        ModManifest, ModManifestArtifact, ReleaseManifest, ReleaseManifestArtifact,
+    };
 
     fn request(version: &str) -> SaveReleaseRequest {
         SaveReleaseRequest {
@@ -434,5 +681,98 @@ mod tests {
         invalid = request("1.8.0");
         invalid.manifest.artifact.sha256 = "bad".to_string();
         assert!(validate_release_request(&invalid).is_err());
+    }
+
+    fn mod_request(category: &str) -> SaveModRequest {
+        SaveModRequest {
+            manifest: ModManifest {
+                schema_version: 1,
+                product: "skinforge-mod".to_string(),
+                category: category.to_string(),
+                artifact: ModManifestArtifact {
+                    file_id: "540667517933".to_string(),
+                    link_id: "link".to_string(),
+                    link_url: None,
+                    file_name: "example.mod".to_string(),
+                    file_size: 100,
+                    group_id: "2144952871".to_string(),
+                    parent_id: "541664465686".to_string(),
+                },
+            },
+        }
+    }
+
+    #[test]
+    fn validates_supported_mod_categories() {
+        for category in ["map", "skin", "accessory"] {
+            assert_eq!(
+                validate_mod_request(&mod_request(category))
+                    .unwrap()
+                    .category,
+                category
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_mod_manifest_fields() {
+        let mut invalid = mod_request("other");
+        assert!(validate_mod_request(&invalid).is_err());
+        invalid = mod_request("map");
+        invalid.manifest.product = "other".to_string();
+        assert!(validate_mod_request(&invalid).is_err());
+        invalid = mod_request("map");
+        invalid.manifest.artifact.file_size = 0;
+        assert!(validate_mod_request(&invalid).is_err());
+    }
+
+    #[test]
+    fn mod_pagination_is_bounded() {
+        assert_eq!(
+            mod_pagination(&ModListQuery {
+                page: None,
+                page_size: None,
+                category: None,
+            }),
+            (1, 10, 0)
+        );
+        assert_eq!(
+            mod_pagination(&ModListQuery {
+                page: Some(0),
+                page_size: Some(0),
+                category: None,
+            }),
+            (1, 1, 0)
+        );
+        assert_eq!(
+            mod_pagination(&ModListQuery {
+                page: Some(3),
+                page_size: Some(500),
+                category: None,
+            }),
+            (3, 50, 100)
+        );
+    }
+
+    #[test]
+    fn public_mod_item_exposes_only_public_metadata() {
+        let item = SkinforgeModListItem {
+            id: 7,
+            category: "map".to_string(),
+            file_name: "example.zip".to_string(),
+            file_size: 123,
+            created_at: chrono::NaiveDate::from_ymd_opt(2026, 8, 26)
+                .unwrap()
+                .and_hms_opt(10, 0, 0)
+                .unwrap(),
+        };
+        let value = serde_json::to_value(item).unwrap();
+        assert_eq!(value["id"], 7);
+        assert_eq!(value["fileName"], "example.zip");
+        assert!(value.get("fileId").is_none());
+        assert!(value.get("linkId").is_none());
+        assert!(value.get("sha1").is_none());
+        assert!(value.get("sha256").is_none());
+        assert!(value.get("url").is_none());
     }
 }

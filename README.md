@@ -90,10 +90,14 @@ npm run build
 | POST | `/api/client/u/{username}/activate` | SkinForge 激活 CDK | 无 |
 | GET/POST | `/api/skinforge/kdocs-settings` | 查询或更新加密的云文档配置 | JWT |
 | GET/POST | `/api/skinforge/release` | 查询或发布最新 SkinForge Windows 版本 | JWT |
+| GET/POST | `/api/skinforge/mods` | 分页查询或导入自定义 MOD | JWT |
+| DELETE | `/api/skinforge/mods/{id}` | 下架自定义 MOD | JWT |
 | GET | `/api/skinforge/hash-status` | 查询 Hash 同步状态 | JWT |
 | POST | `/api/skinforge/hash-sync` | 手动触发 Hash 同步 | JWT |
 | GET | `/api/client/skinforge/update/{target}/{arch}/{version}` | Tauri 动态更新信息 | 无 |
 | GET | `/api/client/skinforge/hash` | 当前 Hash TXT/gzip OSS 元数据 | 无 |
+| GET | `/api/client/skinforge/mods` | 自定义 MOD 公开分页列表 | 无 |
+| GET | `/api/client/skinforge/mods/{id}/download` | 获取 MOD 临时 OSS 地址 | 无 |
 | GET (WebSocket) | `/api/client/u/{username}/cdk-events` | CDK 换绑失效事件 | `Authorization: Bearer <CDK>` + `X-SkinForge-Machine` |
 
 ### 接口示例

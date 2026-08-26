@@ -219,6 +219,40 @@ export interface SkinforgeRelease {
   updatedAt: string;
 }
 
+export type SkinforgeModCategory = 'map' | 'skin' | 'accessory';
+
+export interface SkinforgeModManifestArtifact {
+  fileId: string;
+  linkId: string;
+  linkUrl?: string | null;
+  fileName: string;
+  fileSize: number;
+  groupId: string;
+  parentId: string;
+}
+
+export interface SkinforgeModManifest {
+  schemaVersion: number;
+  product: string;
+  category: SkinforgeModCategory;
+  artifact: SkinforgeModManifestArtifact;
+}
+
+export interface SkinforgeMod {
+  id: number;
+  category: SkinforgeModCategory;
+  fileName: string;
+  fileSize: number;
+  createdAt: string;
+}
+
+export interface SkinforgeModListResponse {
+  items: SkinforgeMod[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface HashReleaseSummary {
   version: string;
   canonicalSize: number;

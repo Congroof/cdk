@@ -86,6 +86,10 @@ Token 有效期为 **24 小时**，通过登录接口获取。
 | 29 | POST | `/api/skinforge/hash-sync` | 是 | 手动触发 Hash 同步 |
 | 30 | GET | `/api/client/skinforge/update/{target}/{arch}/{current_version}` | 否 | Tauri 动态更新 |
 | 31 | GET | `/api/client/skinforge/hash` | 否 | 获取 Hash OSS 下载元数据 |
+| 32 | GET/POST | `/api/skinforge/mods` | 是 | 分页查询或导入自定义 MOD |
+| 33 | DELETE | `/api/skinforge/mods/{id}` | 是 | 下架自定义 MOD |
+| 34 | GET | `/api/client/skinforge/mods` | 否 | 获取自定义 MOD 公开分页列表 |
+| 35 | GET | `/api/client/skinforge/mods/{id}/download` | 否 | 获取 MOD 临时 OSS 下载地址 |
 
 ### CDK 换绑失效 WebSocket
 
@@ -1287,6 +1291,77 @@ curl http://localhost/api/client/u/admin/announcement
   "url": "https://...oss.../installer.exe"
 }
 ```
+
+### 自定义 MOD 管理与下载
+
+`POST /api/skinforge/mods` 需要 JWT，接收一份 MOD 清单。服务端只保存稳定的
+`fileId/linkId` 和展示元数据，不保存真实文件或临时 OSS 地址：
+
+```json
+{
+  "manifest": {
+    "schemaVersion": 1,
+    "product": "skinforge-mod",
+    "category": "map",
+    "artifact": {
+      "fileId": "123",
+      "linkId": "abc",
+      "linkUrl": null,
+      "fileName": "example.zip",
+      "fileSize": 123456,
+      "groupId": "2144952871",
+      "parentId": "541664465686"
+    }
+  }
+}
+```
+
+`category` 仅支持 `map`、`skin`、`accessory`。导入前会校验云文档目录、拒绝重复的
+`fileId + linkId`，并换链探测源文件。文件扩展名不受限制。
+
+管理端和公开端均支持 `page`、`page_size` 与可选 `category`：
+
+```http
+GET /api/client/skinforge/mods?page=1&page_size=10&category=map
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "category": "map",
+        "fileName": "example.zip",
+        "fileSize": 123456,
+        "createdAt": "2026-08-26T10:00:00"
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "page_size": 10
+  }
+}
+```
+
+公开列表不返回 `fileId`、`linkId`、摘要或 OSS 地址。客户端下载时调用：
+
+```http
+GET /api/client/skinforge/mods/1/download
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://...temporary-oss-url..."
+  }
+}
+```
+
+该接口每次请求都会动态生成临时地址。`DELETE /api/skinforge/mods/{id}` 只删除数据库
+记录，不删除云文档中的源文件。
 
 ### Hash 元数据与同步
 

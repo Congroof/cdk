@@ -7,6 +7,7 @@ import {
   Megaphone,
   MessageSquare,
   Network,
+  PackageOpen,
   Plus,
   RefreshCw,
   Search,
@@ -22,11 +23,12 @@ import BannedMachines from '../components/BannedMachines';
 import FeedbackList from '../components/FeedbackList';
 import AnnouncementEditor from '../components/AnnouncementEditor';
 import SkinforgeManager from '../components/SkinforgeManager';
+import SkinforgeModManager from '../components/SkinforgeModManager';
 import MultiDeviceCdkList from '../components/MultiDeviceCdkList';
 import api from '../api';
 import type { Cdk } from '../types';
 
-type TabKey = 'cdk' | 'multiDevice' | 'stats' | 'banned' | 'feedback' | 'announcement' | 'skinforge';
+type TabKey = 'cdk' | 'multiDevice' | 'stats' | 'banned' | 'feedback' | 'announcement' | 'skinforge' | 'mods';
 
 const statusFilters: { value: string; label: string }[] = [
   { value: '', label: '全部' },
@@ -197,6 +199,17 @@ export default function Dashboard() {
           <Settings className="w-4 h-4" />
           SkinForge
         </button>
+        <button
+          onClick={() => setActiveTab('mods')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+            activeTab === 'mods'
+              ? 'bg-gradient-to-r from-violet-500/15 to-fuchsia-500/15 text-violet-400 shadow-sm'
+              : 'text-slate-400 hover:text-slate-300 hover:bg-white/5'
+          }`}
+        >
+          <PackageOpen className="w-4 h-4" />
+          自定义 MOD
+        </button>
       </div>
 
       {activeTab === 'cdk' ? (
@@ -313,6 +326,8 @@ export default function Dashboard() {
         <FeedbackList />
       ) : activeTab === 'announcement' ? (
         <AnnouncementEditor />
+      ) : activeTab === 'mods' ? (
+        <SkinforgeModManager />
       ) : (
         <SkinforgeManager />
       )}

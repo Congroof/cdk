@@ -12,7 +12,7 @@ mod usage;
 use std::sync::Arc;
 
 use axum::http::Method;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{middleware as axum_mw, Router};
 use tower_http::cors::{Any, CorsLayer};
 
@@ -48,7 +48,7 @@ async fn main() {
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
         .allow_headers(Any);
 
     let protected = Router::new()
@@ -86,6 +86,14 @@ async fn main() {
         .route(
             "/skinforge/release",
             get(handlers::skinforge::get_release).post(handlers::skinforge::save_release),
+        )
+        .route(
+            "/skinforge/mods",
+            get(handlers::skinforge::list_mods).post(handlers::skinforge::save_mod),
+        )
+        .route(
+            "/skinforge/mods/{id}",
+            delete(handlers::skinforge::delete_mod),
         )
         .route(
             "/skinforge/hash-status",
@@ -132,6 +140,14 @@ async fn main() {
         .route(
             "/client/skinforge/hash",
             get(handlers::skinforge::public_hash),
+        )
+        .route(
+            "/client/skinforge/mods",
+            get(handlers::skinforge::public_mods),
+        )
+        .route(
+            "/client/skinforge/mods/{id}/download",
+            get(handlers::skinforge::mod_download_url),
         );
 
     let app = Router::new()

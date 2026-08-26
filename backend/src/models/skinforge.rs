@@ -37,6 +37,70 @@ pub struct ReleaseManifestArtifact {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ModManifestArtifact {
+    pub file_id: String,
+    pub link_id: String,
+    pub link_url: Option<String>,
+    pub file_name: String,
+    pub file_size: u64,
+    pub group_id: String,
+    pub parent_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModManifest {
+    pub schema_version: u32,
+    pub product: String,
+    pub category: String,
+    pub artifact: ModManifestArtifact,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SaveModRequest {
+    pub manifest: ModManifest,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModListQuery {
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+    pub category: Option<String>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct SkinforgeModRow {
+    pub id: u64,
+    pub category: String,
+    pub file_name: String,
+    pub file_size: u64,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkinforgeModListItem {
+    pub id: u64,
+    pub category: String,
+    pub file_name: String,
+    pub file_size: u64,
+    pub created_at: NaiveDateTime,
+}
+
+impl From<SkinforgeModRow> for SkinforgeModListItem {
+    fn from(row: SkinforgeModRow) -> Self {
+        Self {
+            id: row.id,
+            category: row.category,
+            file_name: row.file_name,
+            file_size: row.file_size,
+            created_at: row.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReleaseManifest {
     pub schema_version: u32,
     pub product: String,
