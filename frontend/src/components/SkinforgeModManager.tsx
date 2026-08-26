@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileJson,
+  ImageOff,
   PackageOpen,
   RefreshCw,
   Trash2,
@@ -168,10 +169,11 @@ export default function SkinforgeModManager() {
         </div>
 
         {manifest && (
-          <div className="grid sm:grid-cols-3 gap-3 mt-5 text-sm">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5 text-sm">
             <InfoItem label="分类" value={categoryLabels[manifest.category]} />
             <InfoItem label="文件名" value={manifest.artifact.fileName} />
             <InfoItem label="文件大小" value={formatBytes(manifest.artifact.fileSize)} />
+            <InfoItem label="预览图 file_id" value={manifest.artifact.previewFileId ?? '未配置'} />
           </div>
         )}
       </section>
@@ -212,6 +214,7 @@ export default function SkinforgeModManager() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-slate-500 border-b border-white/5">
+                <th className="px-4 py-3 font-medium">预览</th>
                 <th className="px-4 py-3 font-medium">分类</th>
                 <th className="px-4 py-3 font-medium">文件名</th>
                 <th className="px-4 py-3 font-medium">文件大小</th>
@@ -221,12 +224,15 @@ export default function SkinforgeModManager() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} className="px-4 py-12 text-center text-slate-500">正在加载...</td></tr>
+                <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">正在加载...</td></tr>
               ) : items.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-12 text-center text-slate-500">暂无 MOD</td></tr>
+                <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">暂无 MOD</td></tr>
               ) : (
                 items.map((item) => (
                   <tr key={item.id} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02]">
+                    <td className="px-4 py-3">
+                      <PreviewImage key={`${item.id}-${item.previewUrl ?? 'none'}`} url={item.previewUrl} />
+                    </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex px-2.5 py-1 text-xs text-violet-300 bg-violet-500/10 border border-violet-500/20 rounded-full">
                         {categoryLabels[item.category]}
@@ -342,6 +348,32 @@ function isModManifest(value: unknown): value is SkinforgeModManifest {
     && artifact.groupId.trim().length > 0
     && typeof artifact.parentId === 'string'
     && artifact.parentId.trim().length > 0
+    && (
+      artifact.previewFileId === undefined
+      || artifact.previewFileId === null
+      || (typeof artifact.previewFileId === 'string' && artifact.previewFileId.trim().length > 0)
+    )
+  );
+}
+
+function PreviewImage({ url }: { url: string | null }) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) {
+    return (
+      <div className="w-20 h-16 flex items-center justify-center bg-white/5 border border-white/5 rounded-lg text-slate-600">
+        <ImageOff className="w-5 h-5" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt="MOD 预览图"
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+      className="w-20 h-16 object-cover bg-white/5 border border-white/5 rounded-lg"
+    />
   );
 }
 

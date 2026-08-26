@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS skinforge_mods (
     link_url TEXT NULL,
     file_name VARCHAR(255) NOT NULL,
     file_size BIGINT UNSIGNED NOT NULL,
+    preview_file_id BIGINT UNSIGNED NULL,
     created_by BIGINT NOT NULL,
     created_at DATETIME DEFAULT NOW(),
     UNIQUE KEY uq_skinforge_mods_file_link (file_id, link_id),

@@ -1,17 +1,18 @@
 # 自定义 MOD 分类管理——实施计划
 
 1. 数据库
-   - 新增 `010_create_skinforge_mods.sql`。
+   - 为 `skinforge_mods` 增加可空的 `preview_file_id`，新增 `011` ALTER 迁移，并同步启动迁移和 Docker 初始化 SQL。
    - 同步 `backend/src/db.rs` 启动建表与 `deploy/mysql-init/01_schema.sql`。
 2. 后端模型与处理器
    - 在 SkinForge 模型中加入 MOD 清单、分类、数据库 Row、管理/公开 DTO、分页查询类型。
    - 实现清单校验与分类解析，复用已有 ID 校验和 KDocs 换链探测逻辑。
    - 实现鉴权的分页列表、导入、删除接口。
    - 实现无鉴权的分页元数据和按 ID 获取临时 URL 接口。
+   - 扩展 KDocs 客户端，批量请求 thumbnail API，并把返回地址映射到当前页 MOD。
    - 在 `main.rs` 注册 protected/public 路由。
 3. 前端
    - 在共享类型中加入 MOD 清单与分页响应类型。
-   - 新建 `SkinforgeModManager`，实现 JSON 导入、分类子标签、分页列表、文件大小展示和确认删除。
+   - 扩展 `SkinforgeModManager`，实现预览图 JSON 导入与列表缩略图展示。
    - 在 Dashboard 添加“自定义 MOD”Tab。
 4. 文档
    - 更新 `API.md`、`README.md` 的管理/公开接口与 JSON 示例。

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Duration;
 
 use axum::extract::{Path, Query, State};
@@ -24,6 +25,7 @@ const RELEASE_PLATFORM: &str = "windows-x86_64";
 const MOD_SCHEMA_VERSION: u32 = 1;
 const MOD_PRODUCT: &str = "skinforge-mod";
 const MOD_KDOCS_TIMEOUT: Duration = Duration::from_secs(30);
+const MOD_THUMBNAIL_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_NOTES_LEN: usize = 20_000;
 
 pub async fn get_kdocs_settings(
@@ -230,7 +232,7 @@ pub async fn updater(
 pub async fn list_mods(
     State(state): State<AppState>,
     Query(params): Query<ModListQuery>,
-) -> Result<Json<serde_json::Value>, AppError> {
+) -> Result<Response, AppError> {
     mod_list_response(&state, params).await
 }
 
@@ -283,8 +285,9 @@ pub async fn save_mod(
     let user_id = current_user_id(&state, &claims.sub).await?;
     let result = sqlx::query(
         "INSERT INTO skinforge_mods (
-            category, file_id, link_id, link_url, file_name, file_size, created_by
-         ) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            category, file_id, link_id, link_url, file_name, file_size,
+            preview_file_id, created_by
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(validated.category)
     .bind(validated.file_id)
@@ -292,6 +295,7 @@ pub async fn save_mod(
     .bind(payload.manifest.artifact.link_url.as_deref())
     .bind(payload.manifest.artifact.file_name.trim())
     .bind(payload.manifest.artifact.file_size)
+    .bind(validated.preview_file_id)
     .bind(user_id)
     .execute(&state.db)
     .await
@@ -321,7 +325,7 @@ pub async fn delete_mod(
 pub async fn public_mods(
     State(state): State<AppState>,
     Query(params): Query<ModListQuery>,
-) -> Result<Json<serde_json::Value>, AppError> {
+) -> Result<Response, AppError> {
     mod_list_response(&state, params).await
 }
 
@@ -454,20 +458,17 @@ async fn fetch_release(state: &AppState) -> Result<Option<SkinforgeRelease>, App
 
 async fn fetch_mod(state: &AppState, id: u64) -> Result<SkinforgeModListItem, AppError> {
     let row = sqlx::query_as::<_, SkinforgeModRow>(
-        "SELECT id, category, file_name, file_size, created_at
+        "SELECT id, category, file_name, file_size, preview_file_id, created_at
          FROM skinforge_mods WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("MOD 不存在".to_string()))?;
-    Ok(row.into())
+    Ok(row.into_list_item(None))
 }
 
-async fn mod_list_response(
-    state: &AppState,
-    params: ModListQuery,
-) -> Result<Json<serde_json::Value>, AppError> {
+async fn mod_list_response(state: &AppState, params: ModListQuery) -> Result<Response, AppError> {
     let (page, page_size, offset) = mod_pagination(&params);
     let category = params
         .category
@@ -482,7 +483,7 @@ async fn mod_list_response(
                 .fetch_one(&state.db)
                 .await?;
         let rows = sqlx::query_as::<_, SkinforgeModRow>(
-            "SELECT id, category, file_name, file_size, created_at
+            "SELECT id, category, file_name, file_size, preview_file_id, created_at
              FROM skinforge_mods WHERE category = ?
              ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
         )
@@ -497,7 +498,7 @@ async fn mod_list_response(
             .fetch_one(&state.db)
             .await?;
         let rows = sqlx::query_as::<_, SkinforgeModRow>(
-            "SELECT id, category, file_name, file_size, created_at
+            "SELECT id, category, file_name, file_size, preview_file_id, created_at
              FROM skinforge_mods
              ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
         )
@@ -507,16 +508,63 @@ async fn mod_list_response(
         .await?;
         (total, rows)
     };
-    let items: Vec<SkinforgeModListItem> = rows.into_iter().map(Into::into).collect();
-    Ok(Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "items": items,
-            "total": total,
-            "page": page,
-            "page_size": page_size
+    let preview_urls = resolve_mod_preview_urls(state, &rows).await;
+    let items = map_mod_list_items(rows, &preview_urls);
+    Ok((
+        [(CACHE_CONTROL, "no-store")],
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "items": items,
+                "total": total,
+                "page": page,
+                "page_size": page_size
+            }
+        })),
+    )
+        .into_response())
+}
+
+fn map_mod_list_items(
+    rows: Vec<SkinforgeModRow>,
+    preview_urls: &HashMap<u64, String>,
+) -> Vec<SkinforgeModListItem> {
+    rows.into_iter()
+        .map(|row| {
+            let preview_url = row
+                .preview_file_id
+                .and_then(|file_id| preview_urls.get(&file_id).cloned());
+            row.into_list_item(preview_url)
+        })
+        .collect()
+}
+
+async fn resolve_mod_preview_urls(
+    state: &AppState,
+    rows: &[SkinforgeModRow],
+) -> HashMap<u64, String> {
+    let mut file_ids: Vec<u64> = rows.iter().filter_map(|row| row.preview_file_id).collect();
+    file_ids.sort_unstable();
+    file_ids.dedup();
+    if file_ids.is_empty() {
+        return HashMap::new();
+    }
+    match tokio::time::timeout(
+        MOD_THUMBNAIL_TIMEOUT,
+        state.kdocs.resolve_thumbnail_urls(&state.db, &file_ids),
+    )
+    .await
+    {
+        Ok(Ok(urls)) => urls,
+        Ok(Err(_)) => {
+            tracing::warn!("获取 MOD 预览图失败，已降级为无预览图");
+            HashMap::new()
         }
-    })))
+        Err(_) => {
+            tracing::warn!("获取 MOD 预览图超时");
+            HashMap::new()
+        }
+    }
 }
 
 fn mod_pagination(params: &ModListQuery) -> (u32, u32, u64) {
@@ -557,6 +605,7 @@ struct ValidatedMod {
     file_id: u64,
     group_id: u64,
     parent_id: u64,
+    preview_file_id: Option<u64>,
 }
 
 fn validate_mod_request(payload: &SaveModRequest) -> Result<ValidatedMod, AppError> {
@@ -580,6 +629,12 @@ fn validate_mod_request(payload: &SaveModRequest) -> Result<ValidatedMod, AppErr
         file_id: parse_positive_id(&manifest.artifact.file_id, "file_id")?,
         group_id: parse_positive_id(&manifest.artifact.group_id, "group_id")?,
         parent_id: parse_positive_id(&manifest.artifact.parent_id, "parent_id")?,
+        preview_file_id: manifest
+            .artifact
+            .preview_file_id
+            .as_deref()
+            .map(|value| parse_positive_id(value, "preview_file_id"))
+            .transpose()?,
     })
 }
 
@@ -717,6 +772,7 @@ mod tests {
                     file_size: 100,
                     group_id: "2144952871".to_string(),
                     parent_id: "541664465686".to_string(),
+                    preview_file_id: None,
                 },
             },
         }
@@ -732,6 +788,12 @@ mod tests {
                 category
             );
         }
+        let mut request = mod_request("map");
+        request.manifest.artifact.preview_file_id = Some("123".to_string());
+        assert_eq!(
+            validate_mod_request(&request).unwrap().preview_file_id,
+            Some(123)
+        );
     }
 
     #[test]
@@ -743,6 +805,9 @@ mod tests {
         assert!(validate_mod_request(&invalid).is_err());
         invalid = mod_request("map");
         invalid.manifest.artifact.file_size = 0;
+        assert!(validate_mod_request(&invalid).is_err());
+        invalid = mod_request("map");
+        invalid.manifest.artifact.preview_file_id = Some("0".to_string());
         assert!(validate_mod_request(&invalid).is_err());
     }
 
@@ -781,6 +846,7 @@ mod tests {
             category: "map".to_string(),
             file_name: "example.zip".to_string(),
             file_size: 123,
+            preview_url: None,
             created_at: chrono::NaiveDate::from_ymd_opt(2026, 8, 26)
                 .unwrap()
                 .and_hms_opt(10, 0, 0)
@@ -794,6 +860,41 @@ mod tests {
         assert!(value.get("sha1").is_none());
         assert!(value.get("sha256").is_none());
         assert!(value.get("url").is_none());
+        assert!(value.get("previewFileId").is_none());
+        assert!(value.get("previewUrl").unwrap().is_null());
+    }
+
+    #[test]
+    fn maps_available_previews_and_degrades_missing_ones() {
+        let created_at = chrono::NaiveDate::from_ymd_opt(2026, 8, 26)
+            .unwrap()
+            .and_hms_opt(10, 0, 0)
+            .unwrap();
+        let rows = vec![
+            SkinforgeModRow {
+                id: 1,
+                category: "map".to_string(),
+                file_name: "with-preview.zip".to_string(),
+                file_size: 1,
+                preview_file_id: Some(101),
+                created_at,
+            },
+            SkinforgeModRow {
+                id: 2,
+                category: "skin".to_string(),
+                file_name: "failed-preview.zip".to_string(),
+                file_size: 2,
+                preview_file_id: Some(102),
+                created_at,
+            },
+        ];
+        let previews = HashMap::from([(101, "https://thumbnail.example/101".to_string())]);
+        let items = map_mod_list_items(rows, &previews);
+        assert_eq!(
+            items[0].preview_url.as_deref(),
+            Some("https://thumbnail.example/101")
+        );
+        assert!(items[1].preview_url.is_none());
     }
 
     #[test]

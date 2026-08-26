@@ -269,6 +269,7 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
             link_url TEXT NULL,
             file_name VARCHAR(255) NOT NULL,
             file_size BIGINT UNSIGNED NOT NULL,
+            preview_file_id BIGINT UNSIGNED NULL,
             created_by BIGINT NOT NULL,
             created_at DATETIME DEFAULT NOW(),
             UNIQUE KEY uq_skinforge_mods_file_link (file_id, link_id),
@@ -278,6 +279,25 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
     .execute(&pool)
     .await
     .expect("Failed to create skinforge_mods table");
+
+    let (preview_column_count,): (u64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'skinforge_mods'
+         AND COLUMN_NAME = 'preview_file_id'",
+    )
+    .bind(db_name)
+    .fetch_one(&pool)
+    .await
+    .expect("Failed to inspect skinforge_mods preview column");
+    if preview_column_count == 0 {
+        sqlx::query(
+            "ALTER TABLE skinforge_mods
+             ADD COLUMN preview_file_id BIGINT UNSIGNED NULL AFTER file_size",
+        )
+        .execute(&pool)
+        .await
+        .expect("Failed to add skinforge_mods preview column");
+    }
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skinforge_hash_releases (

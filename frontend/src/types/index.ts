@@ -229,6 +229,7 @@ export interface SkinforgeModManifestArtifact {
   fileSize: number;
   groupId: string;
   parentId: string;
+  previewFileId?: string | null;
 }
 
 export interface SkinforgeModManifest {
@@ -243,6 +244,7 @@ export interface SkinforgeMod {
   category: SkinforgeModCategory;
   fileName: string;
   fileSize: number;
+  previewUrl: string | null;
   createdAt: string;
 }
 

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -64,6 +65,12 @@ struct CreateFileResponse {
 struct DownloadResponse {
     download_url: Option<String>,
     url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ThumbnailResponse {
+    #[serde(default)]
+    files_thumbnail_url: HashMap<String, String>,
 }
 
 #[derive(Debug)]
@@ -236,6 +243,44 @@ impl KdocsService {
             .or(body.url)
             .ok_or_else(|| "云文档响应中没有下载地址".to_string())?;
         Ok(url)
+    }
+
+    pub async fn resolve_thumbnail_urls(
+        &self,
+        pool: &MySqlPool,
+        file_ids: &[u64],
+    ) -> Result<HashMap<u64, String>, String> {
+        if file_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let settings = self.load_settings(pool).await?;
+        let client = build_api_client(&settings.cookie)?;
+        let file_ids = file_ids
+            .iter()
+            .map(u64::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        let response = client
+            .get(format!("{API_BASE}/3rd/drive/api/v5/files/pic/thumbnail"))
+            .query(&[
+                ("fileids", file_ids.as_str()),
+                ("review", "true"),
+                ("max_edge", "260"),
+            ])
+            .send()
+            .await
+            .map_err(|error| format!("获取云文档缩略图失败: {error}"))?;
+        let body: ThumbnailResponse = parse_json_response(response, "获取云文档缩略图").await?;
+        Ok(body
+            .files_thumbnail_url
+            .into_iter()
+            .filter_map(|(file_id, url)| {
+                if url.trim().is_empty() {
+                    return None;
+                }
+                file_id.parse::<u64>().ok().map(|file_id| (file_id, url))
+            })
+            .collect())
     }
 
     pub async fn probe_download_url(&self, url: &str) -> Result<(), String> {
@@ -627,5 +672,24 @@ mod tests {
         assert!(!unsupported_download_mode(
             r#"{"result":"userNotLogin","errno":10000}"#
         ));
+    }
+
+    #[test]
+    fn parses_thumbnail_urls_and_ignores_failed_entries() {
+        let response: ThumbnailResponse = serde_json::from_str(
+            r#"{
+                "failed": {"554861507786": "not found"},
+                "files_thumbnail_url": {
+                    "554861507785": "https://thumbnail.example/preview"
+                },
+                "result": "ok"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            response.files_thumbnail_url.get("554861507785"),
+            Some(&"https://thumbnail.example/preview".to_string())
+        );
+        assert!(!response.files_thumbnail_url.contains_key("554861507786"));
     }
 }

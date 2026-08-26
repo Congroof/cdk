@@ -33,12 +33,15 @@
     "fileName": "example.zip",
     "fileSize": 123456,
     "groupId": "GROUP_ID",
-    "parentId": "PARENT_ID"
+    "parentId": "PARENT_ID",
+    "previewFileId": "PREVIEW_FILE_ID"
   }
 }
 ```
 
 - `artifact` 复用现有 release 清单的云文档字段结构；MOD 清单不包含版本、平台、签名和更新说明。
+- MOD 可通过 `artifact.previewFileId` 可选配一张预览图；预览图是云文档中的独立文件，拥有单独的文件 ID，不在本服务存储图片内容或临时缩略图 URL。字段缺失或为 `null` 表示无预览图。
+- 导入时不调用缩略图接口验证预览图；仅当 `previewFileId` 存在时校验其为正整数，避免可选预览服务异常阻塞 MOD 发布。
 - 不限制 MOD 文件扩展名；服务端只要求文件名非空、文件大小大于零，并在入库前动态换链探测源文件可访问。
 - 仅允许以下三种固定分类：
   - `map`：地图
@@ -58,6 +61,8 @@
 - 公开列表支持可选分类筛选参数 `category=map|skin|accessory`；不传时返回全部。
 - 公开列表必须分页，默认按创建时间倒序；具体分页参数与上限沿用项目现有接口风格。
 - 公开列表条目返回 MOD `id`，不额外返回固定格式的 `downloadUrl`；客户端使用约定路由和 `id` 请求临时下载地址。
+- 列表查询需批量调用云文档缩略图接口，将配置了预览图且成功换取缩略图地址的 MOD 返回 `previewUrl`；没有预览图或单个缩略图生成失败时返回 `null`。
+- 缩略图接口整体失败或部分文件出现在 `failed` 中时，列表继续成功返回；受影响条目的 `previewUrl` 为 `null`，管理后台显示占位图，后续刷新重新尝试。
 - MOD JSON、数据库和公开接口均不包含 SHA-1/SHA-256；首版不提供下载文件摘要校验。
 - 每个 MOD 提供稳定的无鉴权下载地址获取接口；调用时才通过 `file_id + link_id` 动态换取临时 OSS 地址，并返回 `{ "url": "..." }` JSON，由客户端自行下载。
 - 删除表示硬删除数据库记录并立即从公开列表下架，不删除云文档中的真实文件。
@@ -88,7 +93,7 @@
 ### 公开接口（无鉴权）
 
 - `GET /api/client/skinforge/mods?page=1&page_size=10&category=map`
-  - 返回分页元数据；条目包含 `id`、`category`、`fileName`、`fileSize`、`createdAt`。
+  - 返回分页元数据；条目包含 `id`、`category`、`fileName`、`fileSize`、`previewUrl`、`createdAt`。
   - 不返回 `file_id`、`link_id`、Hash、固定下载接口地址或临时 OSS URL。
 - `GET /api/client/skinforge/mods/{id}/download`
   - 请求时动态换链，返回临时 OSS URL；不代理真实文件内容。

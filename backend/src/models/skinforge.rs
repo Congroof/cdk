@@ -45,6 +45,7 @@ pub struct ModManifestArtifact {
     pub file_size: u64,
     pub group_id: String,
     pub parent_id: String,
+    pub preview_file_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -74,6 +75,7 @@ pub struct SkinforgeModRow {
     pub category: String,
     pub file_name: String,
     pub file_size: u64,
+    pub preview_file_id: Option<u64>,
     pub created_at: NaiveDateTime,
 }
 
@@ -84,17 +86,19 @@ pub struct SkinforgeModListItem {
     pub category: String,
     pub file_name: String,
     pub file_size: u64,
+    pub preview_url: Option<String>,
     pub created_at: NaiveDateTime,
 }
 
-impl From<SkinforgeModRow> for SkinforgeModListItem {
-    fn from(row: SkinforgeModRow) -> Self {
-        Self {
-            id: row.id,
-            category: row.category,
-            file_name: row.file_name,
-            file_size: row.file_size,
-            created_at: row.created_at,
+impl SkinforgeModRow {
+    pub fn into_list_item(self, preview_url: Option<String>) -> SkinforgeModListItem {
+        SkinforgeModListItem {
+            id: self.id,
+            category: self.category,
+            file_name: self.file_name,
+            file_size: self.file_size,
+            preview_url,
+            created_at: self.created_at,
         }
     }
 }

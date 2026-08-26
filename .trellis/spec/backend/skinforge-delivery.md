@@ -1,6 +1,6 @@
 # SkinForge Delivery API
 
-> Executable contract for encrypted KDocs configuration and dynamic software/Hash delivery metadata.
+> Executable contract for encrypted KDocs configuration and dynamic software, Hash, and MOD delivery metadata.
 
 ## Scenario: Global OSS-backed SkinForge delivery
 
@@ -20,6 +20,8 @@ GET/POST /api/skinforge/mods               JWT
 DELETE   /api/skinforge/mods/{id}           JWT
 GET      /api/client/skinforge/mods
 GET      /api/client/skinforge/mods/{id}/download
+GET      https://365.kdocs.cn/3rd/drive/api/v5/files/pic/thumbnail
+         ?fileids={comma-separated ids}&review=true&max_edge=260
 ```
 
 Database resources:
@@ -29,7 +31,7 @@ skinforge_kdocs_settings(id=1)
 skinforge_releases(id=1)
 skinforge_hash_releases(id=1)
 skinforge_hash_sync_status(id=1)
-skinforge_mods(id=auto increment, unique(file_id, link_id))
+skinforge_mods(id=auto increment, unique(file_id, link_id), preview_file_id nullable)
 ```
 
 ### 3. Contracts
@@ -54,8 +56,14 @@ skinforge_mods(id=auto increment, unique(file_id, link_id))
   directory, validates non-empty file metadata, and probes a fresh URL before
   inserting stable IDs.
 - MOD list responses are paginated and may filter by category. Public items
-  expose only id, category, filename, size, and creation time; they never expose
-  KDocs IDs, hashes, or signed URLs.
+  expose only id, category, filename, size, creation time, and optional
+  `previewUrl`; they never expose KDocs IDs or hashes. The current page's
+  preview file IDs are resolved in one thumbnail request, signed thumbnail URLs
+  are not persisted, and the list response uses `Cache-Control: no-store`.
+- `artifact.previewFileId` is optional and stored as `preview_file_id`. Import
+  validates only that it is a positive integer; thumbnail availability never
+  blocks MOD publication. Whole-request and per-file thumbnail failures degrade
+  the affected `previewUrl` values to null.
 - MOD download URL requests resolve a fresh signed URL by id and return it in
   the standard success envelope with `Cache-Control: no-store`. MOD deletion
   removes only the database row.
@@ -82,6 +90,7 @@ skinforge_mods(id=auto increment, unique(file_id, link_id))
 | Duplicate MOD file/link pair | HTTP 409 |
 | Missing MOD on delete/download | HTTP 404 |
 | MOD resolve/probe exceeds its 30-second stage timeout | HTTP 503; do not insert |
+| MOD thumbnail request/individual preview fails | HTTP 200 list; affected `previewUrl` is null |
 | Hash public request with either URL unavailable | HTTP 503 |
 | Hash DB row missing but complete pending upload exists | Resolve/probe both URLs, publish the pending pair, then return HTTP 200 |
 
@@ -91,6 +100,8 @@ skinforge_mods(id=auto increment, unique(file_id, link_id))
   let Tauri verify the signature.
 - Good: list MOD metadata without resolving URLs, then resolve one fresh URL
   only when the client requests `/mods/{id}/download`.
+- Good: batch one page of preview IDs into one thumbnail request and degrade
+  preview failures without hiding the MOD records.
 - Base: service restarts with the same master key and resumes DB configuration.
 - Base: removing a MOD deletes only its database row; reimporting the same JSON
   publishes it again with a new numeric id.
@@ -99,6 +110,7 @@ skinforge_mods(id=auto increment, unique(file_id, link_id))
 - Bad: use per-user release rows for this global resource.
 - Bad: resolve every MOD URL during list pagination or expose file/link IDs in
   the public item DTO.
+- Bad: persist signed thumbnail URLs or issue one thumbnail request per row.
 - Bad: register a DELETE handler without adding DELETE to the CORS allowlist.
 
 ### 6. Tests Required
@@ -113,7 +125,9 @@ skinforge_mods(id=auto increment, unique(file_id, link_id))
 - Updater 204/200/400/503 integration matrix.
 - Frontend import/config/status build and lint.
 - MOD manifest validation, duplicate constraint, category pagination, public
-  field whitelist, deletion, fresh download URL resolution, and no-store header.
+  field whitelist, optional preview ID migration, batched thumbnail mapping,
+  partial thumbnail failure, deletion, fresh download URL resolution, and
+  no-store headers.
 - Database migration plus startup schema parity.
 
 ### 7. Wrong vs Correct

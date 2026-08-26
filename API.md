@@ -1310,14 +1310,17 @@ curl http://localhost/api/client/u/admin/announcement
       "fileName": "example.zip",
       "fileSize": 123456,
       "groupId": "2144952871",
-      "parentId": "541664465686"
+      "parentId": "541664465686",
+      "previewFileId": "554861507785"
     }
   }
 }
 ```
 
-`category` 仅支持 `map`、`skin`、`accessory`。导入前会校验云文档目录、拒绝重复的
-`fileId + linkId`，并换链探测源文件。文件扩展名不受限制。
+`category` 仅支持 `map`、`skin`、`accessory`。`previewFileId` 可省略或设为 `null`；
+它指向独立的云文档图片文件，导入时只校验为正整数，不验证缩略图是否可用。导入前
+会校验云文档目录、拒绝重复的 `fileId + linkId`，并换链探测 MOD 源文件。文件扩展名
+不受限制。
 
 管理端和公开端均支持 `page`、`page_size` 与可选 `category`：
 
@@ -1335,6 +1338,7 @@ GET /api/client/skinforge/mods?page=1&page_size=10&category=map
         "category": "map",
         "fileName": "example.zip",
         "fileSize": 123456,
+        "previewUrl": "https://...temporary-thumbnail-url...",
         "createdAt": "2026-08-26T10:00:00"
       }
     ],
@@ -1345,7 +1349,12 @@ GET /api/client/skinforge/mods?page=1&page_size=10&category=map
 }
 ```
 
-公开列表不返回 `fileId`、`linkId`、摘要或 OSS 地址。客户端下载时调用：
+列表服务端会把当前页的 `previewFileId` 合并调用一次 KDocs thumbnail 接口；没有预览图、
+接口整体失败或单个文件失败时，对应条目的 `previewUrl` 为 `null`，列表仍正常返回。
+缩略图 URL 不落库，列表响应使用 `Cache-Control: no-store`。
+
+公开列表不返回 `fileId`、`linkId`、`previewFileId`、摘要或 MOD 文件 OSS 地址。客户端下载
+MOD 文件时调用：
 
 ```http
 GET /api/client/skinforge/mods/1/download

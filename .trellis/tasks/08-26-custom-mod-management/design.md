@@ -16,7 +16,7 @@
 
 `category/page/page_size → SQL COUNT + 分页查询 → 管理或公开 DTO → 页面/客户端`
 
-管理和公开列表复用相同分页规则。公开 DTO 只暴露 `id/category/fileName/fileSize/createdAt`。
+管理和公开列表复用相同分页规则。当前页存在预览图文件 ID 时，服务端把这些 ID 合并为一次 KDocs thumbnail 请求，再按 ID 映射到各条 MOD；缩略图临时 URL 不落库。公开 DTO 暴露 `id/category/fileName/fileSize/createdAt/previewUrl`。
 
 ### 下载
 
@@ -43,6 +43,7 @@
 | `link_url` | TEXT NULL | 原始清单元数据 |
 | `file_name` | VARCHAR(255) NOT NULL | 展示名称 |
 | `file_size` | BIGINT UNSIGNED NOT NULL | 展示大小 |
+| `preview_file_id` | BIGINT UNSIGNED NULL | 可选预览图 KDocs 文件标识 |
 | `created_by` | BIGINT NOT NULL | 导入管理员 |
 | `created_at` | DATETIME DEFAULT NOW() | 排序时间 |
 
@@ -52,6 +53,7 @@
 - `INDEX(category, created_at, id)` 支持分类倒序分页。
 - category 由服务端枚举校验，不依赖数据库 ENUM，保持 SQLx 行类型简单。
 - 启动建表、编号迁移和 Docker 初始化 SQL 必须同步。
+- 已存在的 `skinforge_mods` 通过 `011_add_skinforge_mod_preview.sql` 和启动时的列存在性检查补充 `preview_file_id`；必要 ALTER 失败时启动应显式失败，避免接口运行后才因缺列报错。
 
 ## API 与序列化
 
@@ -68,6 +70,7 @@
 - category 仅允许 `map/skin/accessory`。
 - file/group/parent ID 是正整数；link ID、文件名非空；文件大小大于 0。
 - MOD 清单不要求 SHA-1/SHA-256，数据库与接口也不保存或暴露摘要。
+- 可选 `previewFileId` 只校验为正整数，不在导入阶段验证缩略图可用性。
 - group/parent 必须匹配服务端全局 KDocs 设置。
 - 重复文件返回 409；不存在的删除/下载记录返回 404；KDocs 换链失败返回 503。
 - 入库前换链并探测，避免发布不可访问文件。
