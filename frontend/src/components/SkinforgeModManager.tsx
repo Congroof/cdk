@@ -96,7 +96,7 @@ export default function SkinforgeModManager() {
     }
     setImporting(true);
     try {
-      const response = await api.post('/skinforge/mods', { manifest });
+      const response = await api.post('/skinforge/mods', { manifest }, { timeout: 70_000 });
       if (response.data.success) {
         setManifest(null);
         toast('MOD 已导入', 'success');

@@ -57,7 +57,12 @@ skinforge_mods(id=auto increment, unique(file_id, link_id))
   expose only id, category, filename, size, and creation time; they never expose
   KDocs IDs, hashes, or signed URLs.
 - MOD download URL requests resolve a fresh signed URL by id and return it in
-  the standard success envelope. MOD deletion removes only the database row.
+  the standard success envelope with `Cache-Control: no-store`. MOD deletion
+  removes only the database row.
+- MOD URL resolution is bounded to 30 seconds; import probing has its own
+  30-second bound. The management client allows 70 seconds, staying below
+  Nginx's 75-second read timeout while avoiding the shared Axios client's
+  10-second default.
 - Because MOD removal uses `DELETE`, the global CORS method allowlist must keep
   `Method::DELETE`; otherwise the same-origin admin works while cross-origin
   deployments fail at the browser preflight boundary.
@@ -76,6 +81,7 @@ skinforge_mods(id=auto increment, unique(file_id, link_id))
 | Invalid MOD manifest/category/directory | HTTP 400; do not insert |
 | Duplicate MOD file/link pair | HTTP 409 |
 | Missing MOD on delete/download | HTTP 404 |
+| MOD resolve/probe exceeds its 30-second stage timeout | HTTP 503; do not insert |
 | Hash public request with either URL unavailable | HTTP 503 |
 | Hash DB row missing but complete pending upload exists | Resolve/probe both URLs, publish the pending pair, then return HTTP 200 |
 
@@ -107,7 +113,7 @@ skinforge_mods(id=auto increment, unique(file_id, link_id))
 - Updater 204/200/400/503 integration matrix.
 - Frontend import/config/status build and lint.
 - MOD manifest validation, duplicate constraint, category pagination, public
-  field whitelist, deletion, and fresh download URL resolution.
+  field whitelist, deletion, fresh download URL resolution, and no-store header.
 - Database migration plus startup schema parity.
 
 ### 7. Wrong vs Correct

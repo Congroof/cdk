@@ -1360,8 +1360,10 @@ GET /api/client/skinforge/mods/1/download
 }
 ```
 
-该接口每次请求都会动态生成临时地址。`DELETE /api/skinforge/mods/{id}` 只删除数据库
-记录，不删除云文档中的源文件。
+该接口每次请求都会动态生成临时地址，并返回 `Cache-Control: no-store`，避免客户端或
+中间缓存复用已过期地址。下载换链限制为 30 秒；导入阶段的换链和探测也分别限制为
+30 秒。
+`DELETE /api/skinforge/mods/{id}` 只删除数据库记录，不删除云文档中的源文件。
 
 ### Hash 元数据与同步
 

@@ -1,4 +1,7 @@
+use std::time::Duration;
+
 use axum::extract::{Path, Query, State};
+use axum::http::header::CACHE_CONTROL;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
@@ -20,6 +23,7 @@ const RELEASE_PRODUCT: &str = "skinforge";
 const RELEASE_PLATFORM: &str = "windows-x86_64";
 const MOD_SCHEMA_VERSION: u32 = 1;
 const MOD_PRODUCT: &str = "skinforge-mod";
+const MOD_KDOCS_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_NOTES_LEN: usize = 20_000;
 
 pub async fn get_kdocs_settings(
@@ -257,20 +261,24 @@ pub async fn save_mod(
         return Err(AppError::Conflict("该 MOD 文件已导入".to_string()));
     }
 
-    let download_url = state
-        .kdocs
-        .resolve_download_url(
+    let download_url = tokio::time::timeout(
+        MOD_KDOCS_TIMEOUT,
+        state.kdocs.resolve_download_url(
             &state.db,
             validated.file_id,
             payload.manifest.artifact.link_id.trim(),
-        )
-        .await
-        .map_err(AppError::BadRequest)?;
-    state
-        .kdocs
-        .probe_download_url(&download_url)
-        .await
-        .map_err(AppError::BadRequest)?;
+        ),
+    )
+    .await
+    .map_err(|_| AppError::ServiceUnavailable("获取 MOD 临时下载地址超时".to_string()))?
+    .map_err(AppError::BadRequest)?;
+    tokio::time::timeout(
+        MOD_KDOCS_TIMEOUT,
+        state.kdocs.probe_download_url(&download_url),
+    )
+    .await
+    .map_err(|_| AppError::ServiceUnavailable("探测 MOD 下载地址超时".to_string()))?
+    .map_err(AppError::BadRequest)?;
 
     let user_id = current_user_id(&state, &claims.sub).await?;
     let result = sqlx::query(
@@ -320,22 +328,34 @@ pub async fn public_mods(
 pub async fn mod_download_url(
     State(state): State<AppState>,
     Path(id): Path<u64>,
-) -> Result<Json<serde_json::Value>, AppError> {
+) -> Result<Response, AppError> {
     let row: Option<(u64, String)> =
         sqlx::query_as("SELECT file_id, link_id FROM skinforge_mods WHERE id = ?")
             .bind(id)
             .fetch_optional(&state.db)
             .await?;
     let (file_id, link_id) = row.ok_or_else(|| AppError::NotFound("MOD 不存在".to_string()))?;
-    let url = state
-        .kdocs
-        .resolve_download_url(&state.db, file_id, &link_id)
-        .await
-        .map_err(AppError::ServiceUnavailable)?;
-    Ok(Json(serde_json::json!({
-        "success": true,
-        "data": { "url": url }
-    })))
+    let url = tokio::time::timeout(
+        MOD_KDOCS_TIMEOUT,
+        state
+            .kdocs
+            .resolve_download_url(&state.db, file_id, &link_id),
+    )
+    .await
+    .map_err(|_| AppError::ServiceUnavailable("获取 MOD 临时下载地址超时".to_string()))?
+    .map_err(AppError::ServiceUnavailable)?;
+    Ok(mod_download_response(url))
+}
+
+fn mod_download_response(url: String) -> Response {
+    (
+        [(CACHE_CONTROL, "no-store")],
+        Json(serde_json::json!({
+            "success": true,
+            "data": { "url": url }
+        })),
+    )
+        .into_response()
 }
 
 pub async fn get_hash_status(
@@ -774,5 +794,12 @@ mod tests {
         assert!(value.get("sha1").is_none());
         assert!(value.get("sha256").is_none());
         assert!(value.get("url").is_none());
+    }
+
+    #[test]
+    fn mod_download_url_response_is_not_cacheable() {
+        let response = mod_download_response("https://oss.example/mod".to_string());
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get(CACHE_CONTROL).unwrap(), "no-store");
     }
 }
