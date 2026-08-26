@@ -577,3 +577,36 @@ Reduced the feedback table to content and actions, moved type, related informati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: 自定义 MOD 生产回归审计
+
+**Date**: 2026-08-27
+**Task**: 自定义 MOD 生产回归审计
+**Branch**: `main`
+
+### Summary
+
+复盘自定义 MOD 相关提交，修复重复查询 SQLx 类型错误与 DATABASE_URL 迁移解析问题，补齐字段边界校验、MySQL 8 集成回归、schema 一致性测试及跨层规范；后端测试/严格 Clippy、前端 lint/build 和真实 MySQL 新旧 schema 验证通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d8518fb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

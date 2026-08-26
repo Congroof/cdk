@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 17
-- **Last Active**: 2026-08-26
+- **Total Sessions**: 18
+- **Last Active**: 2026-08-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~579 | Active |
+| `journal-1.md` | ~612 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 18 | 2026-08-27 | 自定义 MOD 生产回归审计 | `d8518fb` | `main` |
 | 17 | 2026-08-26 | 完成自定义 MOD 管理与对接文档 | `00a77ca`, `4672921`, `c00308e`, `c0ea090` | `main` |
 | 16 | 2026-08-24 | 修复 CDK 过期校验与使用时长统计 | `0d54029` | `main` |
 | 15 | 2026-08-01 | 优化多设备 CDK 查询 | `b78cf2a` | `main` |
