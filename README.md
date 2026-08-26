@@ -100,6 +100,9 @@ npm run build
 | GET | `/api/client/skinforge/mods/{id}/download` | 获取 MOD 临时 OSS 地址 | 无 |
 | GET (WebSocket) | `/api/client/u/{username}/cdk-events` | CDK 换绑失效事件 | `Authorization: Bearer <CDK>` + `X-SkinForge-Machine` |
 
+自定义 MOD 的客户端与管理端完整对接方式见
+[`docs/SKINFORGE_MOD_INTEGRATION.md`](docs/SKINFORGE_MOD_INTEGRATION.md)。
+
 ### 接口示例
 
 **登录：**

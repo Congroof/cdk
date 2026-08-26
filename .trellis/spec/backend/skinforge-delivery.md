@@ -8,6 +8,8 @@
 
 Read this spec when changing `kdocs.rs`, SkinForge handlers/models/tables,
 management UI contracts, updater responses, secrets, or Nginx delivery paths.
+The handoff-ready MOD consumer/admin contract is maintained in
+`docs/SKINFORGE_MOD_INTEGRATION.md`; keep it synchronized with route and DTO changes.
 
 ### 2. Signatures
 

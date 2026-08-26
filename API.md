@@ -1294,6 +1294,9 @@ curl http://localhost/api/client/u/admin/announcement
 
 ### 自定义 MOD 管理与下载
 
+独立的客户端与管理端对接说明、字段表和 TypeScript 示例见
+[`docs/SKINFORGE_MOD_INTEGRATION.md`](docs/SKINFORGE_MOD_INTEGRATION.md)。
+
 `POST /api/skinforge/mods` 需要 JWT，接收一份 MOD 清单。服务端只保存稳定的
 `fileId/linkId` 和展示元数据，不保存真实文件或临时 OSS 地址：
 
