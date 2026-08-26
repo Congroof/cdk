@@ -77,6 +77,16 @@ let rows: Vec<(String, i64)> = sqlx::query_as(
 .await?;
 ```
 
+### MySQL aggregate result types
+
+Decode `COUNT(*)` as `i64` unless the SQL expression explicitly returns an unsigned type. MySQL/MariaDB metadata can expose the aggregate as signed `BIGINT`; decoding it into Rust `u64` then fails at runtime with a SQLx type mismatch.
+
+```rust
+let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM skinforge_mods")
+    .fetch_one(&state.db)
+    .await?;
+```
+
 ### INSERT / UPDATE
 
 ```rust

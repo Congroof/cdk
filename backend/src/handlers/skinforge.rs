@@ -476,8 +476,8 @@ async fn mod_list_response(state: &AppState, params: ModListQuery) -> Result<Res
         .map(parse_mod_category)
         .transpose()?;
 
-    let (total, rows): (u64, Vec<SkinforgeModRow>) = if let Some(category) = category {
-        let (total,): (u64,) =
+    let (total, rows): (i64, Vec<SkinforgeModRow>) = if let Some(category) = category {
+        let (total,): (i64,) =
             sqlx::query_as("SELECT COUNT(*) FROM skinforge_mods WHERE category = ?")
                 .bind(category)
                 .fetch_one(&state.db)
@@ -494,7 +494,7 @@ async fn mod_list_response(state: &AppState, params: ModListQuery) -> Result<Res
         .await?;
         (total, rows)
     } else {
-        let (total,): (u64,) = sqlx::query_as("SELECT COUNT(*) FROM skinforge_mods")
+        let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM skinforge_mods")
             .fetch_one(&state.db)
             .await?;
         let rows = sqlx::query_as::<_, SkinforgeModRow>(
