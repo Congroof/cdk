@@ -280,7 +280,7 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
     .await
     .expect("Failed to create skinforge_mods table");
 
-    let (preview_column_count,): (u64,) = sqlx::query_as(
+    let (preview_column_count,): (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM information_schema.COLUMNS
          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'skinforge_mods'
          AND COLUMN_NAME = 'preview_file_id'",
