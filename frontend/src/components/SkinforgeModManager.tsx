@@ -23,6 +23,9 @@ import { useToast } from './toastContext';
 type CategoryFilter = '' | SkinforgeModCategory;
 
 const PAGE_SIZE = 10;
+const LINK_ID_MAX_CHARS = 128;
+const FILE_NAME_MAX_CHARS = 255;
+const LINK_URL_MAX_BYTES = 65_535;
 const categoryTabs: { value: CategoryFilter; label: string }[] = [
   { value: '', label: '全部' },
   { value: 'map', label: '地图' },
@@ -335,25 +338,39 @@ function isModManifest(value: unknown): value is SkinforgeModManifest {
     && (manifest.category === 'map' || manifest.category === 'skin' || manifest.category === 'accessory')
     && !!artifact
     && typeof artifact.fileId === 'string'
-    && artifact.fileId.trim().length > 0
+    && isPositiveIntegerString(artifact.fileId)
     && typeof artifact.linkId === 'string'
     && artifact.linkId.trim().length > 0
-    && (artifact.linkUrl === undefined || artifact.linkUrl === null || typeof artifact.linkUrl === 'string')
+    && [...artifact.linkId.trim()].length <= LINK_ID_MAX_CHARS
+    && (
+      artifact.linkUrl === undefined
+      || artifact.linkUrl === null
+      || (
+        typeof artifact.linkUrl === 'string'
+        && new TextEncoder().encode(artifact.linkUrl).length <= LINK_URL_MAX_BYTES
+      )
+    )
     && typeof artifact.fileName === 'string'
     && artifact.fileName.trim().length > 0
+    && [...artifact.fileName.trim()].length <= FILE_NAME_MAX_CHARS
     && typeof artifact.fileSize === 'number'
-    && Number.isFinite(artifact.fileSize)
+    && Number.isSafeInteger(artifact.fileSize)
     && artifact.fileSize > 0
     && typeof artifact.groupId === 'string'
-    && artifact.groupId.trim().length > 0
+    && isPositiveIntegerString(artifact.groupId)
     && typeof artifact.parentId === 'string'
-    && artifact.parentId.trim().length > 0
+    && isPositiveIntegerString(artifact.parentId)
     && (
       artifact.previewFileId === undefined
       || artifact.previewFileId === null
-      || (typeof artifact.previewFileId === 'string' && artifact.previewFileId.trim().length > 0)
+      || (typeof artifact.previewFileId === 'string' && isPositiveIntegerString(artifact.previewFileId))
     )
   );
+}
+
+function isPositiveIntegerString(value: string): boolean {
+  const normalized = value.trim();
+  return /^\+?\d+$/.test(normalized) && BigInt(normalized) > 0n && BigInt(normalized) <= 18_446_744_073_709_551_615n;
 }
 
 function PreviewImage({ url }: { url: string | null }) {

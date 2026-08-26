@@ -263,13 +263,6 @@ pub struct MachineUsageQuery {
     pub days: Option<u32>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct UsageOverview {
-    pub unique_machines: i64,
-    pub active_today: i64,
-    pub total_requests: i64,
-}
-
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct MachineStats {
     pub machine_code: String,

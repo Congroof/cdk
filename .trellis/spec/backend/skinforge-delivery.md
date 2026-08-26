@@ -57,6 +57,10 @@ skinforge_mods(id=auto increment, unique(file_id, link_id), preview_file_id null
   category `map`, `skin`, or `accessory`. It reuses the configured KDocs
   directory, validates non-empty file metadata, and probes a fresh URL before
   inserting stable IDs.
+- MOD manifest storage boundaries mirror MySQL and JavaScript exactly:
+  `linkId` <= 128 characters, `fileName` <= 255 characters, UTF-8 `linkUrl`
+  <= 65535 bytes, and `fileSize` is an integer in
+  `1..=9007199254740991`. String KDocs IDs must decode to positive `u64`.
 - MOD list responses are paginated and may filter by category. Public items
   expose only id, category, filename, size, creation time, and optional
   `previewUrl`; they never expose KDocs IDs or hashes. The current page's
@@ -131,6 +135,13 @@ skinforge_mods(id=auto increment, unique(file_id, link_id), preview_file_id null
   partial thumbnail failure, deletion, fresh download URL resolution, and
   no-store headers.
 - Database migration plus startup schema parity.
+- The ignored MySQL 8 MOD regression must be run explicitly and cover the
+  exact filtered/unfiltered COUNT queries, row decoding, duplicate existence
+  query, unique constraint, and deletion. A normal `cargo test` that skips the
+  ignored test is not sufficient release evidence.
+- Start once from a legacy `skinforge_mods` table without `preview_file_id`,
+  and once with a production-style `DATABASE_URL` query parameter, then verify
+  startup and the public list endpoint both succeed.
 
 ### 7. Wrong vs Correct
 

@@ -1,26 +1,20 @@
-use sqlx::mysql::MySqlPoolOptions;
+use std::str::FromStr;
+
+use sqlx::mysql::{MySqlConnectOptions, MySqlPoolOptions};
 use sqlx::MySqlPool;
 
 pub async fn create_pool(database_url: &str) -> MySqlPool {
-    let base_url = database_url
-        .rfind('/')
-        .map(|i| &database_url[..i])
-        .unwrap_or(database_url);
-
-    let db_name = database_url
-        .rfind('/')
-        .map(|i| &database_url[i + 1..])
-        .unwrap_or("cdk_server");
+    let (connect_options, db_name) = parse_database_options(database_url);
 
     let temp_pool = MySqlPoolOptions::new()
         .max_connections(1)
-        .connect(base_url)
+        .connect_with(connect_options.clone().database(""))
         .await
         .expect("Failed to connect to MySQL server");
 
     sqlx::query(&format!(
         "CREATE DATABASE IF NOT EXISTS `{}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
-        db_name
+        escape_mysql_identifier(&db_name)
     ))
     .execute(&temp_pool)
     .await
@@ -28,7 +22,7 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
 
     let pool = MySqlPoolOptions::new()
         .max_connections(10)
-        .connect(database_url)
+        .connect_with(connect_options.database(&db_name))
         .await
         .expect("Failed to create database pool");
 
@@ -285,7 +279,7 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'skinforge_mods'
          AND COLUMN_NAME = 'preview_file_id'",
     )
-    .bind(db_name)
+    .bind(&db_name)
     .fetch_one(&pool)
     .await
     .expect("Failed to inspect skinforge_mods preview column");
@@ -345,4 +339,80 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
 
     tracing::info!("Database '{}' ready", db_name);
     pool
+}
+
+fn parse_database_options(database_url: &str) -> (MySqlConnectOptions, String) {
+    let connect_options = MySqlConnectOptions::from_str(database_url)
+        .expect("DATABASE_URL must be a valid MySQL connection URL");
+    let db_name = connect_options
+        .get_database()
+        .filter(|name| !name.is_empty())
+        .unwrap_or("cdk_server")
+        .to_string();
+    (connect_options, db_name)
+}
+
+fn escape_mysql_identifier(value: &str) -> String {
+    value.replace('`', "``")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_database_name_without_including_url_query() {
+        let (options, db_name) = parse_database_options(
+            "mysql://user:password@127.0.0.1:3306/cdk_server?ssl-mode=preferred",
+        );
+        assert_eq!(db_name, "cdk_server");
+        assert_eq!(options.get_database(), Some("cdk_server"));
+    }
+
+    #[test]
+    fn defaults_database_name_when_url_has_no_path() {
+        let (_, db_name) = parse_database_options("mysql://user:password@127.0.0.1:3306");
+        assert_eq!(db_name, "cdk_server");
+    }
+
+    #[test]
+    fn escapes_backticks_in_database_identifier() {
+        assert_eq!(escape_mysql_identifier("audit`db"), "audit``db");
+    }
+
+    #[test]
+    fn skinforge_mod_schema_fragments_stay_in_sync() {
+        let startup_schema = include_str!("db.rs");
+        let migrations = concat!(
+            include_str!("../migrations/010_create_skinforge_mods.sql"),
+            include_str!("../migrations/011_add_skinforge_mod_preview.sql")
+        );
+        let docker_schema = include_str!("../../deploy/mysql-init/01_schema.sql");
+        let required_fragments = [
+            "category VARCHAR(32) NOT NULL",
+            "file_id BIGINT UNSIGNED NOT NULL",
+            "link_id VARCHAR(128) NOT NULL",
+            "file_name VARCHAR(255) NOT NULL",
+            "file_size BIGINT UNSIGNED NOT NULL",
+            "preview_file_id BIGINT UNSIGNED NULL",
+            "created_by BIGINT NOT NULL",
+            "UNIQUE KEY uq_skinforge_mods_file_link (file_id, link_id)",
+            "KEY idx_skinforge_mods_category_created (category, created_at, id)",
+        ];
+
+        for fragment in required_fragments {
+            assert!(
+                startup_schema.contains(fragment),
+                "startup schema missing {fragment}"
+            );
+            assert!(
+                migrations.contains(fragment),
+                "migration schema missing {fragment}"
+            );
+            assert!(
+                docker_schema.contains(fragment),
+                "Docker schema missing {fragment}"
+            );
+        }
+    }
 }

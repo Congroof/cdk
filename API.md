@@ -1323,7 +1323,9 @@ curl http://localhost/api/client/u/admin/announcement
 `category` 仅支持 `map`、`skin`、`accessory`。`previewFileId` 可省略或设为 `null`；
 它指向独立的云文档图片文件，导入时只校验为正整数，不验证缩略图是否可用。导入前
 会校验云文档目录、拒绝重复的 `fileId + linkId`，并换链探测 MOD 源文件。文件扩展名
-不受限制。
+不受限制。`linkId` 最长 128 个字符，`fileName` 最长 255 个字符，`linkUrl` 的 UTF-8
+长度最多 65535 字节；`fileSize` 必须是 `1..=9007199254740991` 的整数，确保客户端能
+精确表示。所有字符串形式的 KDocs ID 都必须是十进制正整数。
 
 管理端和公开端均支持 `page`、`page_size` 与可选 `category`：
 

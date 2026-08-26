@@ -261,14 +261,14 @@ POST /api/skinforge/mods
 | `schemaVersion` | integer | 是 | 固定为 `1` |
 | `product` | string | 是 | 固定为 `skinforge-mod` |
 | `category` | string | 是 | `map`、`skin` 或 `accessory` |
-| `artifact.fileId` | string | 是 | MOD 文件的正整数 KDocs 文件 ID |
-| `artifact.linkId` | string | 是 | MOD 文件的 KDocs Link ID，不能为空 |
-| `artifact.linkUrl` | string \| null | 否 | 原始链接元数据；没有时可省略或传 `null` |
-| `artifact.fileName` | string | 是 | 非空文件名；扩展名不限制 |
-| `artifact.fileSize` | integer | 是 | 文件字节数，必须大于 0 |
-| `artifact.groupId` | string | 是 | 正整数，必须匹配服务端 KDocs 配置 |
-| `artifact.parentId` | string | 是 | 正整数，必须匹配服务端 KDocs 配置 |
-| `artifact.previewFileId` | string \| null | 否 | 独立预览图片的正整数 KDocs 文件 ID |
+| `artifact.fileId` | string | 是 | 十进制正整数 KDocs 文件 ID |
+| `artifact.linkId` | string | 是 | MOD 文件的 KDocs Link ID，非空且不超过 128 个字符 |
+| `artifact.linkUrl` | string \| null | 否 | 原始链接元数据；没有时可省略或传 `null`，UTF-8 不超过 65535 字节 |
+| `artifact.fileName` | string | 是 | 非空且不超过 255 个字符；扩展名不限制 |
+| `artifact.fileSize` | integer | 是 | 文件字节数，范围 `1..=9007199254740991`，保证 JavaScript 可精确表示 |
+| `artifact.groupId` | string | 是 | 十进制正整数，必须匹配服务端 KDocs 配置 |
+| `artifact.parentId` | string | 是 | 十进制正整数，必须匹配服务端 KDocs 配置 |
+| `artifact.previewFileId` | string \| null | 否 | 独立预览图片的十进制正整数 KDocs 文件 ID |
 
 没有预览图时，可以省略 `previewFileId`，也可以传 `null`：
 

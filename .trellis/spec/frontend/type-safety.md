@@ -117,6 +117,15 @@ catch (err: any) {
 
 Note: The project uses `any` for caught errors (acceptable given axios error structure).
 
+## Imported JSON Guards
+
+Type assertions do not validate administrator-selected JSON at runtime. A file
+import guard must mirror the backend contract, including numeric shape and
+storage limits—not just check that fields are non-empty. For string IDs, verify
+that they parse as positive `u64`; for byte sizes returned to JavaScript, use
+`Number.isSafeInteger`; and mirror backend VARCHAR/TEXT character or UTF-8 byte
+limits. The backend remains authoritative and repeats every validation.
+
 ---
 
 ## Anti-Patterns

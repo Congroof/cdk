@@ -26,6 +26,10 @@ const MOD_SCHEMA_VERSION: u32 = 1;
 const MOD_PRODUCT: &str = "skinforge-mod";
 const MOD_KDOCS_TIMEOUT: Duration = Duration::from_secs(30);
 const MOD_THUMBNAIL_TIMEOUT: Duration = Duration::from_secs(5);
+const MOD_LINK_ID_MAX_CHARS: usize = 128;
+const MOD_FILE_NAME_MAX_CHARS: usize = 255;
+const MOD_LINK_URL_MAX_BYTES: usize = 65_535;
+const MOD_FILE_SIZE_MAX: u64 = 9_007_199_254_740_991;
 const MAX_NOTES_LEN: usize = 20_000;
 
 pub async fn get_kdocs_settings(
@@ -253,13 +257,13 @@ pub async fn save_mod(
         ));
     }
 
-    let duplicate: Option<(u8,)> =
-        sqlx::query_as("SELECT 1 FROM skinforge_mods WHERE file_id = ? AND link_id = ? LIMIT 1")
-            .bind(validated.file_id)
-            .bind(payload.manifest.artifact.link_id.trim())
-            .fetch_optional(&state.db)
-            .await?;
-    if duplicate.is_some() {
+    if mod_file_exists(
+        &state.db,
+        validated.file_id,
+        payload.manifest.artifact.link_id.trim(),
+    )
+    .await?
+    {
         return Err(AppError::Conflict("该 MOD 文件已导入".to_string()));
     }
 
@@ -476,38 +480,7 @@ async fn mod_list_response(state: &AppState, params: ModListQuery) -> Result<Res
         .map(parse_mod_category)
         .transpose()?;
 
-    let (total, rows): (i64, Vec<SkinforgeModRow>) = if let Some(category) = category {
-        let (total,): (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM skinforge_mods WHERE category = ?")
-                .bind(category)
-                .fetch_one(&state.db)
-                .await?;
-        let rows = sqlx::query_as::<_, SkinforgeModRow>(
-            "SELECT id, category, file_name, file_size, preview_file_id, created_at
-             FROM skinforge_mods WHERE category = ?
-             ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
-        )
-        .bind(category)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.db)
-        .await?;
-        (total, rows)
-    } else {
-        let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM skinforge_mods")
-            .fetch_one(&state.db)
-            .await?;
-        let rows = sqlx::query_as::<_, SkinforgeModRow>(
-            "SELECT id, category, file_name, file_size, preview_file_id, created_at
-             FROM skinforge_mods
-             ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
-        )
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&state.db)
-        .await?;
-        (total, rows)
-    };
+    let (total, rows) = query_mod_page(&state.db, category, page_size, offset).await?;
     let preview_urls = resolve_mod_preview_urls(state, &rows).await;
     let items = map_mod_list_items(rows, &preview_urls);
     Ok((
@@ -523,6 +496,61 @@ async fn mod_list_response(state: &AppState, params: ModListQuery) -> Result<Res
         })),
     )
         .into_response())
+}
+
+async fn query_mod_page(
+    pool: &sqlx::MySqlPool,
+    category: Option<&str>,
+    page_size: u32,
+    offset: u64,
+) -> Result<(i64, Vec<SkinforgeModRow>), sqlx::Error> {
+    if let Some(category) = category {
+        let (total,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM skinforge_mods WHERE category = ?")
+                .bind(category)
+                .fetch_one(pool)
+                .await?;
+        let rows = sqlx::query_as::<_, SkinforgeModRow>(
+            "SELECT id, category, file_name, file_size, preview_file_id, created_at
+             FROM skinforge_mods WHERE category = ?
+             ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+        )
+        .bind(category)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(pool)
+        .await?;
+        Ok((total, rows))
+    } else {
+        let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM skinforge_mods")
+            .fetch_one(pool)
+            .await?;
+        let rows = sqlx::query_as::<_, SkinforgeModRow>(
+            "SELECT id, category, file_name, file_size, preview_file_id, created_at
+             FROM skinforge_mods
+             ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+        )
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(pool)
+        .await?;
+        Ok((total, rows))
+    }
+}
+
+async fn mod_file_exists(
+    pool: &sqlx::MySqlPool,
+    file_id: u64,
+    link_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let duplicate: Option<(u64,)> = sqlx::query_as(
+        "SELECT file_id FROM skinforge_mods WHERE file_id = ? AND link_id = ? LIMIT 1",
+    )
+    .bind(file_id)
+    .bind(link_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(duplicate.is_some())
 }
 
 fn map_mod_list_items(
@@ -618,11 +646,36 @@ fn validate_mod_request(payload: &SaveModRequest) -> Result<ValidatedMod, AppErr
     if manifest.artifact.link_id.trim().is_empty() {
         return Err(AppError::BadRequest("link_id 不能为空".to_string()));
     }
+    if manifest.artifact.link_id.trim().chars().count() > MOD_LINK_ID_MAX_CHARS {
+        return Err(AppError::BadRequest(format!(
+            "link_id 不能超过 {MOD_LINK_ID_MAX_CHARS} 个字符"
+        )));
+    }
     if manifest.artifact.file_name.trim().is_empty() {
         return Err(AppError::BadRequest("文件名不能为空".to_string()));
     }
+    if manifest.artifact.file_name.trim().chars().count() > MOD_FILE_NAME_MAX_CHARS {
+        return Err(AppError::BadRequest(format!(
+            "文件名不能超过 {MOD_FILE_NAME_MAX_CHARS} 个字符"
+        )));
+    }
+    if manifest
+        .artifact
+        .link_url
+        .as_deref()
+        .is_some_and(|value| value.len() > MOD_LINK_URL_MAX_BYTES)
+    {
+        return Err(AppError::BadRequest(format!(
+            "link_url 不能超过 {MOD_LINK_URL_MAX_BYTES} 字节"
+        )));
+    }
     if manifest.artifact.file_size == 0 {
         return Err(AppError::BadRequest("文件大小必须大于 0".to_string()));
+    }
+    if manifest.artifact.file_size > MOD_FILE_SIZE_MAX {
+        return Err(AppError::BadRequest(
+            "文件大小超出客户端安全整数范围".to_string(),
+        ));
     }
     Ok(ValidatedMod {
         category: parse_mod_category(&manifest.category)?,
@@ -807,7 +860,22 @@ mod tests {
         invalid.manifest.artifact.file_size = 0;
         assert!(validate_mod_request(&invalid).is_err());
         invalid = mod_request("map");
+        invalid.manifest.artifact.file_size = MOD_FILE_SIZE_MAX + 1;
+        assert!(validate_mod_request(&invalid).is_err());
+        invalid = mod_request("map");
         invalid.manifest.artifact.preview_file_id = Some("0".to_string());
+        assert!(validate_mod_request(&invalid).is_err());
+
+        invalid = mod_request("map");
+        invalid.manifest.artifact.link_id = "x".repeat(MOD_LINK_ID_MAX_CHARS + 1);
+        assert!(validate_mod_request(&invalid).is_err());
+
+        invalid = mod_request("map");
+        invalid.manifest.artifact.file_name = "图".repeat(MOD_FILE_NAME_MAX_CHARS + 1);
+        assert!(validate_mod_request(&invalid).is_err());
+
+        invalid = mod_request("map");
+        invalid.manifest.artifact.link_url = Some("x".repeat(MOD_LINK_URL_MAX_BYTES + 1));
         assert!(validate_mod_request(&invalid).is_err());
     }
 
@@ -902,5 +970,79 @@ mod tests {
         let response = mod_download_response("https://oss.example/mod".to_string());
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers().get(CACHE_CONTROL).unwrap(), "no-store");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires local MySQL 8 via MOD_MYSQL_TEST_DATABASE_URL"]
+    async fn mysql_mod_queries_decode_real_mysql_types() {
+        let database_url = std::env::var("MOD_MYSQL_TEST_DATABASE_URL")
+            .expect("MOD_MYSQL_TEST_DATABASE_URL must be set for this ignored integration test");
+        let options = database_url
+            .parse::<sqlx::mysql::MySqlConnectOptions>()
+            .expect("MOD_MYSQL_TEST_DATABASE_URL must be a valid MySQL URL");
+        assert!(
+            matches!(options.get_host(), "127.0.0.1" | "localhost" | "::1"),
+            "MOD_MYSQL_TEST_DATABASE_URL must target localhost"
+        );
+        assert!(
+            options
+                .get_database()
+                .is_some_and(|name| name.contains("test") || name.contains("audit")),
+            "MOD_MYSQL_TEST_DATABASE_URL database name must contain 'test' or 'audit'"
+        );
+
+        let pool = crate::db::create_pool(&database_url).await;
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let file_id = u64::try_from(unique % 8_000_000_000_000_000_000).unwrap() + 1;
+        let link_id = format!("mod-audit-{unique}");
+        let file_name = format!("mod-audit-{unique}.zip");
+
+        let (before_all, _) = query_mod_page(&pool, None, 50, 0).await.unwrap();
+        let (before_maps, _) = query_mod_page(&pool, Some("map"), 50, 0).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO skinforge_mods (
+                category, file_id, link_id, file_name, file_size, created_by
+             ) VALUES ('map', ?, ?, ?, 123, 1)",
+        )
+        .bind(file_id)
+        .bind(&link_id)
+        .bind(&file_name)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert!(mod_file_exists(&pool, file_id, &link_id).await.unwrap());
+        let (after_all, all_rows) = query_mod_page(&pool, None, 50, 0).await.unwrap();
+        let (after_maps, map_rows) = query_mod_page(&pool, Some("map"), 50, 0).await.unwrap();
+        assert_eq!(after_all, before_all + 1);
+        assert_eq!(after_maps, before_maps + 1);
+        assert!(all_rows.iter().any(|row| row.file_name == file_name));
+        assert!(map_rows.iter().any(|row| row.file_name == file_name));
+
+        let duplicate = sqlx::query(
+            "INSERT INTO skinforge_mods (
+                category, file_id, link_id, file_name, file_size, created_by
+             ) VALUES ('skin', ?, ?, 'duplicate.zip', 1, 1)",
+        )
+        .bind(file_id)
+        .bind(&link_id)
+        .execute(&pool)
+        .await
+        .unwrap_err();
+        assert!(duplicate
+            .as_database_error()
+            .is_some_and(|error| error.is_unique_violation()));
+
+        sqlx::query("DELETE FROM skinforge_mods WHERE file_id = ? AND link_id = ?")
+            .bind(file_id)
+            .bind(&link_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(!mod_file_exists(&pool, file_id, &link_id).await.unwrap());
     }
 }

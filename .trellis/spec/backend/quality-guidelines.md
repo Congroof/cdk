@@ -68,9 +68,22 @@ Never return bare data or non-standard structures.
 
 ## Testing
 
-- Currently **no automated tests** in the project
-- Verification is done manually via API calls (curl / frontend)
-- When adding tests: use `#[tokio::test]` with a test database
+- Unit tests run with `cargo test`; bug fixes must include a focused regression.
+- Runtime SQL is not checked at compile time. Database-sensitive changes must
+  include a `#[tokio::test]` against MySQL 8 and exercise the exact production
+  query/helper.
+- Tests requiring a local database should be marked `#[ignore]`, require an
+  explicit localhost-only URL, and be run separately so a missing database
+  cannot masquerade as a passing integration test.
+- MOD database regression command:
+
+```bash
+MOD_MYSQL_TEST_DATABASE_URL=mysql://USER:PASSWORD@127.0.0.1:3306/TEST_DB \
+  cargo test mysql_mod_queries_decode_real_mysql_types -- --ignored --nocapture
+```
+
+- For cross-layer changes, also run frontend lint/build and a local HTTP smoke
+  matrix for success, validation, auth, not-found, and cache headers.
 
 ---
 

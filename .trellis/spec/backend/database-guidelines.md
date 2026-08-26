@@ -87,6 +87,41 @@ let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM skinforge_mods")
     .await?;
 ```
 
+Do not infer a SQLx decode type from the literal's value. MySQL exposes an
+untyped-looking `SELECT 1` as signed `BIGINT`, so decoding it into `u8` fails
+at runtime even though the value is one. For existence checks, select a real
+typed column and check `fetch_optional(...).is_some()`, or use an explicitly
+cast expression whose MySQL type has been verified by an integration test.
+
+```rust
+let row: Option<(u64,)> = sqlx::query_as(
+    "SELECT file_id FROM skinforge_mods WHERE file_id = ? AND link_id = ? LIMIT 1",
+)
+.bind(file_id)
+.bind(link_id)
+.fetch_optional(pool)
+.await?;
+let exists = row.is_some();
+```
+
+### Database URL parsing
+
+Never derive the database name or server URL with `rfind('/')` or other string
+slicing. Production URLs may include query parameters such as
+`?ssl-mode=required`; string slicing can include the query in `TABLE_SCHEMA`
+comparisons or discard connection options on the server-level connection.
+Parse once with `MySqlConnectOptions`, use `get_database()` for schema checks,
+and clone the options with an empty database for `CREATE DATABASE`.
+
+### Runtime SQL verification
+
+This project uses unchecked runtime SQL strings, so `cargo check`, Clippy, and
+ordinary unit tests do not validate MySQL metadata. Every change involving
+aggregates, literal projections, unsigned integers, nullable columns, schema
+inspection, or migration SQL must execute the exact production query against
+MySQL 8 before release. Keep a local-only ignored integration test for queries
+that require a database and run it explicitly in the release gate.
+
 ### INSERT / UPDATE
 
 ```rust
@@ -149,3 +184,5 @@ Bindings are applied conditionally using a `bind_filters!` macro or sequential `
 - Do NOT introduce an ORM — keep raw SQL for consistency
 - Do NOT use transactions unless strictly required — current handlers use simple sequential queries
 - Do NOT hardcode user IDs — always resolve from JWT claims via `SELECT id FROM users WHERE username = ?`
+- Do NOT decode `SELECT 1` into a small integer based on its value; select a typed column instead
+- Do NOT parse `DATABASE_URL` with string slicing
