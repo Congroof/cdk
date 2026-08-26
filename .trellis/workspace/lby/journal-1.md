@@ -541,3 +541,39 @@ Reduced the feedback table to content and actions, moved type, related informati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: 完成自定义 MOD 管理与对接文档
+
+**Date**: 2026-08-26
+**Task**: 完成自定义 MOD 管理与对接文档
+**Branch**: `main`
+
+### Summary
+
+完成自定义 MOD 分类管理、预览图、公开分页列表与临时下载地址接口，补齐生产保护、管理后台及客户端/管理端对接文档。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `00a77ca` | (see git log) |
+| `4672921` | (see git log) |
+| `c00308e` | (see git log) |
+| `c0ea090` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

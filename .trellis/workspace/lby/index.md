@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
-- **Last Active**: 2026-08-24
+- **Total Sessions**: 17
+- **Last Active**: 2026-08-26
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~543 | Active |
+| `journal-1.md` | ~579 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-08-26 | 完成自定义 MOD 管理与对接文档 | `00a77ca`, `4672921`, `c00308e`, `c0ea090` | `main` |
 | 16 | 2026-08-24 | 修复 CDK 过期校验与使用时长统计 | `0d54029` | `main` |
 | 15 | 2026-08-01 | 优化多设备 CDK 查询 | `b78cf2a` | `main` |
 | 14 | 2026-07-26 | 清理未使用旧版接口和 CLI | `1c600d6` | `main` |
