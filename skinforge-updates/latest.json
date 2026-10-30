@@ -1,0 +1,11 @@
+{
+    "version":  "2.0.0",
+    "notes":  "新增皮肤筛选、缓存管理与自定义 MOD 导入；新增随机皮肤、自定义缓存路径、最小化到托盘；修复重连换肤关闭游戏可能蓝屏",
+    "pub_date":  "2026-07-15T18:22:04Z",
+    "platforms":  {
+                      "windows-x86_64":  {
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRSndJc3ZFdnZuemJoZUdLQkswTXJoTG5SUFA0djN1emFlSlNIMTZUUThrOHlEYm5vWk92SlFXSkdrS0doeWlaMkl2NnJlc3NVcSthSUtRZDN5ZTRFR1BIazhrYS9HMEFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTM5NzI0CWZpbGU6U2tpbkZvcmdlXzIuMC4wX3g2NC1zZXR1cC5leGUKUGdKL2dNajQ2L1ZPeVA1T1pEY0RMekN2K1ZtN0JuVnBoMHVLbmE5MkNHZ3BsWk91ZlYrc1Jxdm5HMEpSakxEd21kaUFBREhVTFhLb1hiM1VORnJnRGc9PQo=",
+                                             "url":  "http://62.234.58.74/skinforge/SkinForge_2.0.0_x64-setup.exe"
+                                         }
+                  }
+}
