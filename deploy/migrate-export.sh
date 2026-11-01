@@ -3,6 +3,9 @@ set -e
 
 # CDK Server 数据库迁移 - 旧服务器导出脚本
 # 用法: ./migrate-export.sh [备份目录]
+#
+# 导出期间不停止 cdk-server。业务表均为 InnoDB，mysqldump --single-transaction
+# 会在开始时取得一致性快照。快照之后的写入不会进入这份备份。
 
 BACKUP_DIR="${1:-/tmp/cdk-migration}"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -16,14 +19,10 @@ mkdir -p "$BACKUP_DIR"
 
 # 检测运行模式：Docker 还是本地 MySQL
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q mysql; then
-    echo "[1/4] 检测到 Docker 部署模式"
+    echo "[1/3] 检测到 Docker 部署模式"
     MYSQL_CONTAINER=$(docker ps --format '{{.Names}}' | grep mysql | head -1)
 
-    echo "[2/4] 停止应用服务（防止迁移期间数据写入）..."
-    docker compose stop cdk-server 2>/dev/null || docker stop $(docker ps --format '{{.Names}}' | grep cdk-server) 2>/dev/null || true
-    echo "  ✓ 应用已停止"
-
-    echo "[3/4] 导出数据库..."
+    echo "[2/3] 导出数据库（应用保持运行，使用 InnoDB 一致性快照）..."
     docker exec "$MYSQL_CONTAINER" mysqldump \
         -u root -p'cdk-mysql-root-2026' \
         --single-transaction \
@@ -33,7 +32,7 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -q mysql; then
         --databases cdk_server > "$BACKUP_FILE"
 
 elif command -v mysql &>/dev/null; then
-    echo "[1/4] 检测到本地 MySQL 部署模式"
+    echo "[1/3] 检测到本地 MySQL 部署模式"
 
     # 从 .env 读取数据库连接信息
     ENV_FILE="/opt/cdk-server/backend/.env"
@@ -47,11 +46,7 @@ elif command -v mysql &>/dev/null; then
         echo ""
     fi
 
-    echo "[2/4] 停止应用服务..."
-    systemctl stop cdk-server 2>/dev/null || true
-    echo "  ✓ 应用已停止"
-
-    echo "[3/4] 导出数据库..."
+    echo "[2/3] 导出数据库（应用保持运行，使用 InnoDB 一致性快照）..."
     if [ -n "$DB_URL" ]; then
         DB_USER=$(echo "$DB_URL" | sed -n 's|mysql://\([^:]*\):.*|\1|p')
         DB_PASS=$(echo "$DB_URL" | sed -n 's|mysql://[^:]*:\([^@]*\)@.*|\1|p')
@@ -85,7 +80,7 @@ TABLE_COUNT=$(grep -c "^CREATE TABLE" "$BACKUP_FILE" || echo "0")
 echo "  ✓ 导出完成: $BACKUP_FILE ($FILE_SIZE, $TABLE_COUNT 个表)"
 
 # 打包（包含 .env 配置供参考）
-echo "[4/4] 打包迁移文件..."
+echo "[3/3] 打包迁移文件..."
 ENV_FILES=""
 [ -f "/opt/cdk-server/backend/.env" ] && ENV_FILES="$ENV_FILES /opt/cdk-server/backend/.env"
 
@@ -102,5 +97,6 @@ echo ""
 echo "  2. 在新服务器执行导入脚本:"
 echo "     ./migrate-import.sh /tmp/$(basename "$ARCHIVE_FILE")"
 echo ""
-echo "  ⚠ 确认迁移成功后，再重启旧服务器的应用（或不再启动）"
+echo "  ⚠ 导出期间应用保持运行。这份备份是导出开始时的一致性快照，之后的写入不在备份里。"
+echo "  ⚠ 若要把流量切到新服务器，需要另行处理快照之后的数据差异。"
 echo ""
