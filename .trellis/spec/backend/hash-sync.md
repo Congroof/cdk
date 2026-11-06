@@ -102,3 +102,15 @@ let gzip = upload_or_resume_gzip()?;
 probe_both(&txt, &gzip).await?;
 publish_pair_in_one_transaction(&txt, &gzip).await?;
 ```
+
+## Immutable cloud objects and repair
+
+Cloud uploads must use `<artifact-sha256>-hashes.game.txt[.gz]`, where the digest
+is of that exact TXT/gzip representation, not always the canonical TXT digest.
+Fixed-name uploads can alias/overwrite the same object across old/new servers;
+HTTP 200 probes alone do not verify integrity. Resume and current-release skip
+checks reject legacy fixed names. A startup/manual sync re-uploads legacy files
+under immutable names and atomically replaces metadata, even for the same version.
+Only the new server needs this fix; it will no longer overwrite old-server objects.
+Public Hash metadata is `Cache-Control: no-store`. Clients still verify exact
+size and digest and preserve their old dictionary on any failure.

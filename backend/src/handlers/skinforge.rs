@@ -389,9 +389,7 @@ pub async fn trigger_hash_sync(
     })))
 }
 
-pub async fn public_hash(
-    State(state): State<AppState>,
-) -> Result<Json<serde_json::Value>, AppError> {
+pub async fn public_hash(State(state): State<AppState>) -> Result<Response, AppError> {
     let mut row = fetch_hash_release(&state).await?;
     if row.is_none()
         && state
@@ -432,14 +430,18 @@ pub async fn public_hash(
             },
         },
     };
-    Ok(Json(serde_json::json!({ "success": true, "data": data })))
+    Ok((
+        [(CACHE_CONTROL, "no-store")],
+        Json(serde_json::json!({ "success": true, "data": data })),
+    )
+        .into_response())
 }
 
 async fn fetch_hash_release(state: &AppState) -> Result<Option<HashReleaseRow>, AppError> {
     Ok(sqlx::query_as::<_, HashReleaseRow>(
         "SELECT version, etag, canonical_size, canonical_sha256, source,
-         txt_file_id, txt_link_id, txt_size, txt_sha256,
-         gzip_file_id, gzip_link_id, gzip_size, gzip_sha256, published_at
+         txt_file_id, txt_link_id, txt_file_name, txt_size, txt_sha256,
+         gzip_file_id, gzip_link_id, gzip_file_name, gzip_size, gzip_sha256, published_at
          FROM skinforge_hash_releases WHERE id = 1",
     )
     .fetch_optional(&state.db)

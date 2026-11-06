@@ -15,7 +15,7 @@ use sqlx::MySqlPool;
 use tokio::io::AsyncWriteExt;
 
 use crate::config::HashSyncConfig;
-use crate::kdocs::KdocsService;
+use crate::kdocs::{content_addressed_file_name, KdocsService};
 use crate::models::skinforge::{
     HashManagementStatus, HashPendingSummary, HashReleaseRow, HashReleaseSummary,
     HashSyncStatusRow, PendingHashUploads, UploadedArtifact,
@@ -261,10 +261,22 @@ impl HashSyncController {
                 gzip: None,
             });
 
+        // Never resume legacy fixed-name objects: another server may have
+        // overwritten them since this metadata was recorded.
+        pending.txt = pending.txt.filter(|artifact| {
+            immutable_artifact_name(&artifact.file_name, HASH_FILE_NAME, &artifact.sha256)
+                && artifact.file_size == candidate.size
+                && artifact.sha256.eq_ignore_ascii_case(&candidate.sha256)
+        });
+        pending.gzip = pending.gzip.filter(|artifact| {
+            immutable_artifact_name(&artifact.file_name, GZIP_FILE_NAME, &artifact.sha256)
+        });
+        write_json_atomic(&pending_path, &pending)?;
+
         if pending.txt.is_none() {
             let uploaded = self
                 .kdocs
-                .upload_file(&self.pool, &hash_path, HASH_FILE_NAME)
+                .upload_content_addressed_file(&self.pool, &hash_path, HASH_FILE_NAME)
                 .await?;
             if !uploaded.sha256.eq_ignore_ascii_case(&candidate.sha256) {
                 return Err("上传前后的规范 Hash SHA-256 不一致".to_string());
@@ -276,7 +288,7 @@ impl HashSyncController {
         if pending.gzip.is_none() {
             pending.gzip = Some(
                 self.kdocs
-                    .upload_file(&self.pool, &gzip_path, GZIP_FILE_NAME)
+                    .upload_content_addressed_file(&self.pool, &gzip_path, GZIP_FILE_NAME)
                     .await?,
             );
             write_json_atomic(&pending_path, &pending)?;
@@ -361,8 +373,8 @@ impl HashSyncController {
     ) -> Result<bool, String> {
         let current = sqlx::query_as::<_, HashReleaseRow>(
             "SELECT version, etag, canonical_size, canonical_sha256, source,
-             txt_file_id, txt_link_id, txt_size, txt_sha256,
-             gzip_file_id, gzip_link_id, gzip_size, gzip_sha256, published_at
+             txt_file_id, txt_link_id, txt_file_name, txt_size, txt_sha256,
+             gzip_file_id, gzip_link_id, gzip_file_name, gzip_size, gzip_sha256, published_at
              FROM skinforge_hash_releases WHERE id = 1",
         )
         .fetch_optional(&self.pool)
@@ -371,6 +383,17 @@ impl HashSyncController {
         let Some(current) = current else {
             return Ok(false);
         };
+        // Force one repair upload for a legacy release even if its HTTP probe
+        // succeeds. A 200 response does not prove its bytes match the DB digest.
+        if !immutable_artifact_name(&current.txt_file_name, HASH_FILE_NAME, &current.txt_sha256)
+            || !immutable_artifact_name(
+                &current.gzip_file_name,
+                GZIP_FILE_NAME,
+                &current.gzip_sha256,
+            )
+        {
+            return Ok(false);
+        }
         if current.version != version
             || !current
                 .canonical_sha256
@@ -448,6 +471,12 @@ impl HashSyncController {
     }
 }
 
+fn immutable_artifact_name(name: &str, base: &str, sha256: &str) -> bool {
+    sha256.len() == 64
+        && sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+        && name == content_addressed_file_name(base, sha256)
+}
+
 fn validate_pending_release<'a>(
     candidate: &CandidateMeta,
     pending: &'a PendingHashUploads,
@@ -471,7 +500,7 @@ fn validate_pending_release<'a>(
 
     if txt.file_id == 0
         || txt.link_id.trim().is_empty()
-        || txt.file_name != HASH_FILE_NAME
+        || !immutable_artifact_name(&txt.file_name, HASH_FILE_NAME, &txt.sha256)
         || txt.file_size != candidate.size
         || !txt.sha256.eq_ignore_ascii_case(&candidate.sha256)
     {
@@ -479,7 +508,7 @@ fn validate_pending_release<'a>(
     }
     if gzip.file_id == 0
         || gzip.link_id.trim().is_empty()
-        || gzip.file_name != GZIP_FILE_NAME
+        || !immutable_artifact_name(&gzip.file_name, GZIP_FILE_NAME, &gzip.sha256)
         || gzip.file_size == 0
     {
         return Err("待发布 gzip 上传记录无效".to_string());
@@ -815,6 +844,35 @@ mod tests {
     }
 
     #[test]
+    fn artifact_names_isolate_versions_and_compression_bytes() {
+        let old = "a".repeat(64);
+        let new = "b".repeat(64);
+        assert_ne!(
+            content_addressed_file_name(HASH_FILE_NAME, &old),
+            content_addressed_file_name(HASH_FILE_NAME, &new)
+        );
+        assert_ne!(
+            content_addressed_file_name(GZIP_FILE_NAME, &old),
+            content_addressed_file_name(GZIP_FILE_NAME, &new)
+        );
+        assert_ne!(
+            content_addressed_file_name(HASH_FILE_NAME, &old),
+            content_addressed_file_name(GZIP_FILE_NAME, &old)
+        );
+        assert!(immutable_artifact_name(
+            &content_addressed_file_name(GZIP_FILE_NAME, &old),
+            GZIP_FILE_NAME,
+            &old.to_uppercase()
+        ));
+        assert!(!immutable_artifact_name(
+            HASH_FILE_NAME,
+            HASH_FILE_NAME,
+            &old
+        ));
+        assert!(!immutable_artifact_name("bad", HASH_FILE_NAME, "../bad"));
+    }
+
+    #[test]
     fn pending_upload_json_round_trips() {
         let dir =
             std::env::temp_dir().join(format!("cdk-server-hash-pending-{}", uuid::Uuid::new_v4()));
@@ -850,7 +908,7 @@ mod tests {
                 file_id: 1,
                 link_id: "txt-link".to_string(),
                 link_url: None,
-                file_name: HASH_FILE_NAME.to_string(),
+                file_name: content_addressed_file_name(HASH_FILE_NAME, &candidate.sha256),
                 file_size: candidate.size,
                 sha1: "b".repeat(40),
                 sha256: candidate.sha256.clone(),
@@ -859,7 +917,7 @@ mod tests {
                 file_id: 2,
                 link_id: "gzip-link".to_string(),
                 link_url: None,
-                file_name: GZIP_FILE_NAME.to_string(),
+                file_name: content_addressed_file_name(GZIP_FILE_NAME, &"d".repeat(64)),
                 file_size: 50,
                 sha1: "c".repeat(40),
                 sha256: "d".repeat(64),
@@ -869,6 +927,13 @@ mod tests {
         let (txt, gzip) = validate_pending_release(&candidate, &pending).unwrap();
         assert_eq!(txt.file_id, 1);
         assert_eq!(gzip.file_id, 2);
+
+        let mut legacy = pending.clone();
+        legacy.txt.as_mut().unwrap().file_name = HASH_FILE_NAME.to_string();
+        assert!(validate_pending_release(&candidate, &legacy).is_err());
+        legacy = pending.clone();
+        legacy.gzip.as_mut().unwrap().file_name = GZIP_FILE_NAME.to_string();
+        assert!(validate_pending_release(&candidate, &legacy).is_err());
 
         let mut invalid = pending.clone();
         invalid.txt.as_mut().unwrap().file_size += 1;

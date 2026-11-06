@@ -181,7 +181,7 @@ impl KdocsService {
         Ok(())
     }
 
-    pub async fn upload_file(
+    pub async fn upload_content_addressed_file(
         &self,
         pool: &MySqlPool,
         path: &Path,
@@ -192,10 +192,11 @@ impl KdocsService {
         let digest = tokio::task::spawn_blocking(move || digest_file(&path_for_digest))
             .await
             .map_err(|error| format!("计算上传文件摘要的后台任务失败: {error}"))??;
+        let file_name = content_addressed_file_name(file_name, &digest.sha256);
         let csrf = csrf_from_cookie(&settings.cookie)?;
         let api_client = build_api_client(&settings.cookie)?;
         let upload_client = build_upload_client()?;
-        let upload = create_upload(&api_client, &csrf, &settings, file_name, &digest).await?;
+        let upload = create_upload(&api_client, &csrf, &settings, &file_name, &digest).await?;
         let (save_key, etag) =
             upload_object(&upload_client, &upload.url, path.to_path_buf(), digest.size).await?;
         let created = create_file(
@@ -205,7 +206,7 @@ impl KdocsService {
             &upload.store,
             &save_key,
             &etag,
-            file_name,
+            &file_name,
             &digest,
         )
         .await?;
@@ -594,6 +595,12 @@ fn digest_file(path: &Path) -> Result<FileDigest, String> {
         sha1: format_hex(&sha1.finalize()),
         sha256: format_hex(&sha256.finalize()),
     })
+}
+
+// Same-name cloud uploads may replace an existing file despite isUpNewVer=false.
+// Name each object by its actual bytes, including the compressed representation.
+pub(crate) fn content_addressed_file_name(file_name: &str, sha256: &str) -> String {
+    format!("{}-{file_name}", sha256.to_ascii_lowercase())
 }
 
 fn content_type_for(file_name: &str) -> &'static str {

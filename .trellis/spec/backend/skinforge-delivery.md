@@ -39,7 +39,8 @@ skinforge_mods(id=auto increment, unique(file_id, link_id), preview_file_id null
 ### 3. Contracts
 
 - `KDOCS_CREDENTIAL_KEY` is required Base64 for exactly 32 bytes and must remain
-  stable across restarts.
+  stable across restarts and server migrations. SQL backups do not include
+  this deployment key; transfer it separately through a private channel.
 - Cookie is AES-256-GCM encrypted with a random 12-byte nonce and versioned AAD.
   GET returns only configured state, hint, directory, editor, and time.
 - All authenticated users can edit global KDocs settings, import a global
@@ -159,3 +160,18 @@ let items = list_public_mod_metadata(pool, page, category).await?;
 // Resolve only in GET /mods/{id}/download.
 let url = kdocs.resolve_download_url(pool, file_id, &link_id).await?;
 ```
+
+## Server address migration
+
+Follow `docs/SERVER_MIGRATION.md`. Publish the same signed client release at
+both old/new updater APIs; old clients update through the unchanged old service,
+and the new client connects directly to the new address. No migration proxy or
+old service code change is required. Both services should share the migrated
+database and original credential key; only deployment settings need adjustment.
+With a shared database, import once and verify the record at both backends:
+strict version monotonicity rejects a second import of the same version.
+Separate release imports do not synchronize CDK/binding data. Keep only one Hash
+sync scheduler. In-memory WebSocket registries are per-process, not a shared
+session cluster; do not promise cross-instance immediate invalidation or global
+online counts. Existing SQL export excludes environment secrets and Hash staging;
+transfer those separately. Do not rewrite the existing export script for this flow.
