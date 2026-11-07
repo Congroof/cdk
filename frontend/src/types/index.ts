@@ -284,3 +284,31 @@ export interface HashManagementStatus {
     gzipUploaded: boolean;
   } | null;
 }
+
+export interface LtkManagerManifest {
+  schemaVersion: 1;
+  product: 'ltk-manager';
+  platform: 'windows-x86_64';
+  version: string;
+  signature: string;
+  artifact: {
+    fileId: string;
+    linkId: string;
+    fileName: string;
+    fileSize: number;
+    sha256: string;
+    groupId: string;
+    parentId: string;
+  };
+}
+
+export interface LtkManagerRelease {
+  version: string;
+  platform: 'windows-x86_64';
+  fileName: string;
+  fileSize: number;
+  sha256: string;
+  fileId: string;
+  linkId: string;
+  updatedAt: string;
+}

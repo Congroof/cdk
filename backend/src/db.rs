@@ -274,6 +274,24 @@ pub async fn create_pool(database_url: &str) -> MySqlPool {
     .await
     .expect("Failed to create skinforge_mods table");
 
+    sqlx::query(
+        r"CREATE TABLE IF NOT EXISTS skinforge_ltk_manager (
+    id TINYINT UNSIGNED PRIMARY KEY,
+    version VARCHAR(64) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_size BIGINT UNSIGNED NOT NULL,
+    sha256 CHAR(64) NOT NULL,
+    signature TEXT NOT NULL,
+    file_id BIGINT UNSIGNED NOT NULL,
+    link_id VARCHAR(128) NOT NULL,
+    updated_by BIGINT NOT NULL,
+    updated_at DATETIME DEFAULT NOW() ON UPDATE NOW()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create skinforge_ltk_manager table");
+
     let (preview_column_count,): (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM information_schema.COLUMNS
          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'skinforge_mods'

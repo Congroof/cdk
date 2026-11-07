@@ -175,3 +175,7 @@ sync scheduler. In-memory WebSocket registries are per-process, not a shared
 session cluster; do not promise cross-instance immediate invalidation or global
 online counts. Existing SQL export excludes environment secrets and Hash staging;
 transfer those separately. Do not rewrite the existing export script for this flow.
+
+## LTK Manager runtime delivery
+
+JWT `GET/POST /api/skinforge/ltk-manager`; public `GET /api/client/skinforge/ltk-manager`. Independent compatibility-pinned singleton `skinforge_ltk_manager`. Reuse Kdocs credentials and resolve a fresh HTTPS OSS URL on each public request; no-store, 404 absent, 503 resolution failure. Public fields: version/platform/fileName/fileSize/sha256/signature/url only. Import validates schema 1/product ltk-manager/platform windows-x86_64, IDs/directory, file size <=512 MiB, SHA-256 and official updater signature format. The client verifies artifact signatures using its pinned upstream key; metadata hashes alone do not authenticate executables. Pins can be rolled back, installed clients are not automatically upgraded. See `docs/LTK_MANAGER_DELIVERY.md`.

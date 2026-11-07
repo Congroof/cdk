@@ -1486,3 +1486,7 @@ unused ──激活──► activated ──到期──► expired
 | SKINFORGE_HASH_SOURCE_URL | 否 | CommunityDragon 默认地址 | Hash 源地址 |
 | SKINFORGE_HASH_MIRROR_DIR | 否 | `/opt/skinforge-updates/hashes` | 私有 staging 与重试目录 |
 | SKINFORGE_HASH_SYNC_INTERVAL_HOURS | 否 | `24` | 周期同步间隔小时数 |
+
+## LTK Manager runtime delivery
+
+JWT `GET/POST /api/skinforge/ltk-manager`; public `GET /api/client/skinforge/ltk-manager`. Independent compatibility-pinned singleton `skinforge_ltk_manager`. Reuse Kdocs credentials and resolve a fresh HTTPS OSS URL on each public request; no-store, 404 absent, 503 resolution failure. Public fields: version/platform/fileName/fileSize/sha256/signature/url only. Import validates schema 1/product ltk-manager/platform windows-x86_64, IDs/directory, file size <=512 MiB, SHA-256 and official updater signature format. The client verifies artifact signatures using its pinned upstream key; metadata hashes alone do not authenticate executables. Pins can be rolled back, installed clients are not automatically upgraded. See `docs/LTK_MANAGER_DELIVERY.md`.

@@ -84,6 +84,10 @@ async fn main() {
                 .post(handlers::skinforge::save_kdocs_settings),
         )
         .route(
+            "/skinforge/ltk-manager",
+            get(handlers::ltk_manager::get).post(handlers::ltk_manager::save),
+        )
+        .route(
             "/skinforge/release",
             get(handlers::skinforge::get_release).post(handlers::skinforge::save_release),
         )
@@ -136,6 +140,10 @@ async fn main() {
         .route(
             "/client/skinforge/update/{target}/{arch}/{current_version}",
             get(handlers::skinforge::updater),
+        )
+        .route(
+            "/client/skinforge/ltk-manager",
+            get(handlers::ltk_manager::public),
         )
         .route(
             "/client/skinforge/hash",

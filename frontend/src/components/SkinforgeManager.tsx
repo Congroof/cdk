@@ -18,6 +18,7 @@ import type {
 } from '../types';
 import { formatDate } from '../utils/format';
 import { useToast } from './toastContext';
+import LtkManagerReleaseManager from './LtkManagerReleaseManager';
 
 export default function SkinforgeManager() {
   const { toast } = useToast();
@@ -163,6 +164,7 @@ export default function SkinforgeManager() {
 
   return (
     <div className="max-w-5xl space-y-6">
+      <LtkManagerReleaseManager />
       <section className="bg-white/[0.03] border border-white/5 rounded-2xl p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>

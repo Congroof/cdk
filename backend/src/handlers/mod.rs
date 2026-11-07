@@ -4,4 +4,5 @@ pub mod banned;
 pub mod cdk;
 pub mod cdk_events;
 pub mod feedback;
+pub mod ltk_manager;
 pub mod skinforge;

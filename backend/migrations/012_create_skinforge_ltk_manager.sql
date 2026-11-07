@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS skinforge_ltk_manager (
+    id TINYINT UNSIGNED PRIMARY KEY,
+    version VARCHAR(64) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_size BIGINT UNSIGNED NOT NULL,
+    sha256 CHAR(64) NOT NULL,
+    signature TEXT NOT NULL,
+    file_id BIGINT UNSIGNED NOT NULL,
+    link_id VARCHAR(128) NOT NULL,
+    updated_by BIGINT NOT NULL,
+    updated_at DATETIME DEFAULT NOW() ON UPDATE NOW()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
