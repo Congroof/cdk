@@ -4,15 +4,20 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Copy,
-  Check,
+  ShieldBan,
   ShieldOff,
-  ChevronLeft,
-  ChevronRight,
+  X,
 } from 'lucide-react';
 import api from '../api';
 import { useToast } from './toastContext';
 import type { BannedMachine } from '../types';
+import { formatDate } from '../utils/format';
+import CopyButton from './CopyButton';
+import StatCard from './ui/StatCard';
+import ResponsiveModal from './ui/ResponsiveModal';
+import Pagination from './ui/Pagination';
+import EmptyState from './ui/EmptyState';
+import Skeleton from './ui/Skeleton';
 
 export default function BannedMachines() {
   const { toast } = useToast();
@@ -29,7 +34,6 @@ export default function BannedMachines() {
   const [banning, setBanning] = useState(false);
   const [confirmUnban, setConfirmUnban] = useState<string | null>(null);
   const [unbanning, setUnbanning] = useState(false);
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -55,10 +59,17 @@ export default function BannedMachines() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
-    setSearch(searchInput);
+    setSearch(searchInput.trim());
   };
 
-  const handleBan = async () => {
+  const handleClearSearch = () => {
+    setSearchInput('');
+    setPage(1);
+    setSearch('');
+  };
+
+  const handleBan = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!banCode.trim()) {
       toast('请输入机器码', 'error');
       return;
@@ -74,12 +85,13 @@ export default function BannedMachines() {
         setShowBanModal(false);
         setBanCode('');
         setBanReason('');
-        fetchData();
+        void fetchData();
       }
     } catch (err: unknown) {
-      const message = axios.isAxiosError(err) && typeof err.response?.data?.error === 'string'
-        ? err.response.data.error
-        : '封禁失败';
+      const message =
+        axios.isAxiosError(err) && typeof err.response?.data?.error === 'string'
+          ? err.response.data.error
+          : '封禁失败';
       toast(message, 'error');
     } finally {
       setBanning(false);
@@ -94,285 +106,292 @@ export default function BannedMachines() {
       if (res.data.success) {
         toast('机器码已解禁', 'success');
         setConfirmUnban(null);
-        fetchData();
+        void fetchData();
       }
     } catch (err: unknown) {
-      const message = axios.isAxiosError(err) && typeof err.response?.data?.error === 'string'
-        ? err.response.data.error
-        : '解禁失败';
+      const message =
+        axios.isAxiosError(err) && typeof err.response?.data?.error === 'string'
+          ? err.response.data.error
+          : '解禁失败';
       toast(message, 'error');
     } finally {
       setUnbanning(false);
     }
   };
 
-  const handleCopy = async (code: string) => {
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(code);
-      } else {
-        const textArea = document.createElement('textarea');
-        textArea.value = code;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {
-          document.execCommand('copy');
-        } catch {
-          throw new Error('复制失败');
-        } finally {
-          textArea.remove();
-        }
-      }
-      setCopiedCode(code);
-      toast('已复制到剪贴板', 'success');
-      setTimeout(() => setCopiedCode(null), 2000);
-    } catch {
-      toast('复制失败，请手动选择复制', 'error');
-    }
-  };
-
-  const formatDate = (d: string | null) => {
-    if (!d) return '-';
-    const utcDate = new Date(d + 'Z');
-    return utcDate.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const totalPages = Math.ceil(total / pageSize);
-
   return (
     <div className="space-y-6">
-      {/* Stats Card */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white/[0.03] border border-white/5 rounded-xl p-5">
-          <div className="text-sm text-slate-400 mb-1">已封禁设备</div>
-          <div className="text-2xl font-bold bg-gradient-to-r from-red-500 to-orange-600 bg-clip-text text-transparent">
-            {total}
-          </div>
-        </div>
-      </div>
+      {/* Stats & Toolbar Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+        <StatCard
+          label="黑名单封禁设备数"
+          value={total}
+          subtitle="被封禁设备无法激活或验证任何 CDK"
+          icon={ShieldBan}
+          tone="rose"
+        />
 
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <form onSubmit={handleSearch} className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="搜索机器码 / 封禁原因"
-            className="pl-10 pr-4 py-2 text-sm bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all w-72"
-          />
-        </form>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            className="p-2.5 hover:bg-white/5 border border-white/10 rounded-xl transition-colors"
-            title="刷新"
-          >
-            <RefreshCw className={`w-4 h-4 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            onClick={() => setShowBanModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-red-500/20 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            封禁机器码
-          </button>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="overflow-x-auto border border-white/5 rounded-xl">
-        <table className="w-full text-sm whitespace-nowrap">
-          <thead>
-            <tr className="border-b border-white/5 bg-white/[0.02]">
-              <th className="text-left px-4 py-3 font-medium text-slate-400">机器码</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-400">封禁原因</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-400">封禁时间</th>
-              <th className="text-right px-4 py-3 font-medium text-slate-400">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="text-center py-16 text-slate-500">
-                  {loading ? '加载中...' : '暂无封禁记录'}
-                </td>
-              </tr>
-            ) : (
-              items.map((item) => (
-                <tr
-                  key={item.id}
-                  className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <div className="group relative flex items-center gap-1">
-                      <code className="text-xs text-slate-300 bg-white/5 px-2 py-1 rounded font-mono max-w-[240px] truncate block">
-                        {item.machine_code}
-                      </code>
-                      <button
-                        onClick={() => handleCopy(item.machine_code)}
-                        className="p-1 hover:bg-white/5 rounded transition-colors shrink-0"
-                      >
-                        {copiedCode === item.machine_code ? (
-                          <Check className="w-3 h-3 text-green-400" />
-                        ) : (
-                          <Copy className="w-3 h-3 text-slate-500" />
-                        )}
-                      </button>
-                      <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-10">
-                        <div className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono shadow-xl max-w-xs break-all">
-                          {item.machine_code}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {item.reason ? (
-                      <span className="text-slate-400 max-w-[200px] truncate block">
-                        {item.reason}
-                      </span>
-                    ) : (
-                      <span className="text-slate-600">-</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-slate-400">{formatDate(item.created_at)}</td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => setConfirmUnban(item.machine_code)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-emerald-400 hover:text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/10 rounded-lg transition-all"
-                    >
-                      <ShieldOff className="w-3.5 h-3.5" />
-                      解禁
-                    </button>
-                  </td>
-                </tr>
-              ))
+        <div className="lg:col-span-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
+          <form onSubmit={handleSearch} className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="搜索机器码 / 封禁原因..."
+              className="h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] pl-10 pr-8 text-sm text-white placeholder-slate-500 transition-all focus:border-rose-500/40 focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 hover:text-slate-300"
+                aria-label="清空搜索"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             )}
-          </tbody>
-        </table>
-      </div>
+          </form>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-500">
-            共 {total} 条，第 {page}/{totalPages} 页
-          </span>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setPage(page - 1)}
-              disabled={page <= 1}
-              className="p-2 hover:bg-white/5 border border-white/10 rounded-lg disabled:opacity-30 transition-colors"
+              type="button"
+              onClick={() => void fetchData()}
+              disabled={loading}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-slate-300 transition-colors hover:bg-white/[0.07]"
+              title="刷新"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-rose-400' : ''}`} />
             </button>
             <button
-              onClick={() => setPage(page + 1)}
-              disabled={page >= totalPages}
-              className="p-2 hover:bg-white/5 border border-white/10 rounded-lg disabled:opacity-30 transition-colors"
+              type="button"
+              onClick={() => setShowBanModal(true)}
+              className="inline-flex h-10 flex-1 sm:flex-initial items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-orange-600 px-4 text-xs sm:text-sm font-medium text-white shadow-lg shadow-rose-500/20 transition-all hover:from-rose-600 hover:to-orange-700"
             >
-              <ChevronRight className="w-4 h-4" />
+              <Plus className="h-4 w-4" />
+              封禁机器码
             </button>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Ban Modal */}
-      {showBanModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowBanModal(false)}
-          />
-          <div className="relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
-            <h3 className="text-lg font-semibold mb-4">封禁机器码</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-slate-400 mb-1.5">机器码</label>
-                <input
-                  type="text"
-                  value={banCode}
-                  onChange={(e) => setBanCode(e.target.value)}
-                  placeholder="输入要封禁的机器码"
-                  className="w-full px-4 py-2.5 text-sm bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1.5">
-                  封禁原因 <span className="text-slate-600">（可选）</span>
-                </label>
-                <input
-                  type="text"
-                  value={banReason}
-                  onChange={(e) => setBanReason(e.target.value)}
-                  placeholder="例如：异常使用、多设备共享"
-                  className="w-full px-4 py-2.5 text-sm bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowBanModal(false)}
-                className="flex-1 py-2.5 text-sm font-medium border border-white/10 rounded-xl hover:bg-white/5 transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleBan}
-                disabled={banning || !banCode.trim()}
-                className="flex-1 py-2.5 text-sm font-medium bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl hover:bg-red-500/20 transition-colors disabled:opacity-50"
-              >
-                {banning ? '封禁中...' : '确认封禁'}
-              </button>
+      {/* Data View */}
+      {loading && items.length === 0 ? (
+        <Skeleton rows={4} />
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={ShieldBan}
+          title={search ? '没有找到匹配的封禁记录' : '当前暂无封禁设备记录'}
+          description="点击右上角「封禁机器码」可将异常或恶意设备加入黑名单。"
+        />
+      ) : (
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02]">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm whitespace-nowrap">
+                <thead>
+                  <tr className="border-b border-white/[0.06] bg-[#0a0f1d] text-xs font-medium uppercase tracking-wider text-slate-400">
+                    <th className="px-4 py-3.5 text-left">机器码</th>
+                    <th className="px-4 py-3.5 text-left">封禁原因</th>
+                    <th className="px-4 py-3.5 text-left">封禁时间</th>
+                    <th className="sticky right-0 z-10 bg-[#0a0f1d]/95 px-4 py-3.5 text-right backdrop-blur-md shadow-[-8px_0_16px_-10px_rgba(0,0,0,0.65)]">
+                      操作
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.05]">
+                  {items.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="group transition-colors hover:bg-white/[0.025]"
+                    >
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <code
+                            className="block max-w-[300px] truncate rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 font-mono text-xs text-slate-200"
+                            title={item.machine_code}
+                          >
+                            {item.machine_code}
+                          </code>
+                          <CopyButton text={item.machine_code} />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        {item.reason ? (
+                          <span
+                            className="block max-w-[260px] truncate text-slate-300"
+                            title={item.reason}
+                          >
+                            {item.reason}
+                          </span>
+                        ) : (
+                          <span className="text-slate-600">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5 text-slate-400 tabular-nums">
+                        {formatDate(item.created_at)}
+                      </td>
+                      <td className="sticky right-0 z-10 bg-[#080d19]/95 group-hover:bg-[#0d1424]/95 px-4 py-3.5 text-right backdrop-blur-md shadow-[-8px_0_16px_-10px_rgba(0,0,0,0.65)] transition-colors">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmUnban(item.machine_code)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-all hover:bg-emerald-500/20"
+                        >
+                          <ShieldOff className="h-3.5 w-3.5" />
+                          解禁
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
+
+          {/* Mobile Card View */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden">
+            {items.map((item) => (
+              <article
+                key={item.id}
+                className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 space-y-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs text-slate-500 mb-1">被封禁机器码</div>
+                    <div className="flex items-center gap-1.5">
+                      <code className="min-w-0 break-all font-mono text-xs font-medium text-rose-300">
+                        {item.machine_code}
+                      </code>
+                      <CopyButton text={item.machine_code} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/[0.05] bg-black/20 p-3 text-xs">
+                  <div>
+                    <span className="text-slate-500 block">封禁原因</span>
+                    <span className="mt-0.5 block text-slate-200 break-words">
+                      {item.reason || '未填写'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">封禁时间</span>
+                    <span className="mt-0.5 block text-slate-300 tabular-nums">
+                      {formatDate(item.created_at)}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setConfirmUnban(item.machine_code)}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 py-2 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20"
+                >
+                  <ShieldOff className="h-3.5 w-3.5" />
+                  解除封禁
+                </button>
+              </article>
+            ))}
+          </div>
+
+          <Pagination
+            total={total}
+            page={page}
+            pageSize={pageSize}
+            loading={loading}
+            onPageChange={setPage}
+          />
+        </>
       )}
+
+      {/* Ban Machine Modal */}
+      <ResponsiveModal
+        open={showBanModal}
+        onClose={() => setShowBanModal(false)}
+        title="封禁机器码"
+        description="被封禁的设备将无法使用任何 CDK 进行激活或心跳校验"
+        size="md"
+      >
+        <form onSubmit={handleBan} className="space-y-4">
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-2">
+              设备机器码
+            </label>
+            <input
+              type="text"
+              value={banCode}
+              onChange={(e) => setBanCode(e.target.value)}
+              placeholder="粘贴要封禁的机器码"
+              className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 font-mono text-sm text-white placeholder-slate-500 transition-all focus:border-rose-500/40 focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-2">
+              封禁原因 <span className="text-slate-500 font-normal">（可选）</span>
+            </label>
+            <input
+              type="text"
+              value={banReason}
+              onChange={(e) => setBanReason(e.target.value)}
+              placeholder="例如：恶意破解、多设备非法共享"
+              className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white placeholder-slate-500 transition-all focus:border-rose-500/40 focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowBanModal(false)}
+              className="flex-1 h-11 rounded-xl border border-white/10 bg-white/[0.03] text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.06]"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={banning || !banCode.trim()}
+              className="flex-1 h-11 rounded-xl border border-rose-500/30 bg-rose-500/15 text-sm font-semibold text-rose-300 transition-colors hover:bg-rose-500/25 disabled:opacity-50"
+            >
+              {banning ? '封禁中...' : '确认封禁'}
+            </button>
+          </div>
+        </form>
+      </ResponsiveModal>
 
       {/* Unban Confirm Modal */}
-      {confirmUnban && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setConfirmUnban(null)}
-          />
-          <div className="relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
-            <h3 className="text-lg font-semibold mb-2">确认解禁</h3>
-            <p className="text-sm text-slate-400 mb-1">确定要解禁以下机器码吗？</p>
-            <code className="text-sm text-emerald-400 font-mono break-all">{confirmUnban}</code>
-            <p className="text-xs text-slate-500 mt-2">
-              解禁后该机器码将可以正常使用 CDK 进行激活和验证。
-            </p>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setConfirmUnban(null)}
-                className="flex-1 py-2.5 text-sm font-medium border border-white/10 rounded-xl hover:bg-white/5 transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleUnban}
-                disabled={unbanning}
-                className="flex-1 py-2.5 text-sm font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
-              >
-                {unbanning ? '解禁中...' : '确认解禁'}
-              </button>
-            </div>
+      <ResponsiveModal
+        open={Boolean(confirmUnban)}
+        onClose={() => setConfirmUnban(null)}
+        title="确认解除封禁"
+        description="解禁后该机器码将立即恢复正常的 CDK 激活和验证权限。"
+        size="sm"
+        footer={
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setConfirmUnban(null)}
+              className="flex-1 rounded-xl border border-white/10 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={handleUnban}
+              disabled={unbanning}
+              className="flex-1 rounded-xl border border-emerald-500/30 bg-emerald-500/15 py-2.5 text-sm font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
+            >
+              {unbanning ? '解禁中...' : '确认解禁'}
+            </button>
           </div>
+        }
+      >
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
+          <div className="text-xs text-emerald-300/70 mb-1">目标机器码</div>
+          <code className="break-all font-mono text-xs sm:text-sm font-semibold text-emerald-300">
+            {confirmUnban}
+          </code>
         </div>
-      )}
+      </ResponsiveModal>
     </div>
   );
 }

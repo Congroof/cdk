@@ -87,20 +87,32 @@ Standard sizes: `w-3.5 h-3.5` (inline), `w-4 h-4` (buttons), `w-5 h-5` (toast/al
 
 ---
 
-## Modals
+## Modals & Responsive Sheets (`src/components/ui/ResponsiveModal.tsx`)
 
-Modal pattern used in the project:
+Always use `ResponsiveModal` from `src/components/ui/ResponsiveModal` instead of hand-rolling `fixed inset-0` overlays. It automatically provides:
+- **PC (`sm:` and above)**: Centered glass-morphism Dialog.
+- **Mobile (`< 640px`)**: Bottom Sheet with drag indicator bar.
+- **Accessibility**: `Escape` key to close and `document.body` scroll locking while open.
 
 ```tsx
-{isOpen && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center">
-    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-    <div className="relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
-      {/* content */}
-    </div>
-  </div>
-)}
+import ResponsiveModal from './ui/ResponsiveModal';
+
+<ResponsiveModal
+  open={isOpen}
+  onClose={onClose}
+  title="弹窗标题"
+  description="副标题或说明"
+  size="md"
+>
+  {/* content */}
+</ResponsiveModal>
 ```
+
+## Dual-View Responsive Data Lists (PC Table + Mobile Card Stream)
+
+For data-heavy lists (`CDKTable`, `MultiDeviceCdkList`, `BannedMachines`, `FeedbackList`, `MachineTable`, `SkinforgeModManager`), provide:
+- **PC View (`hidden lg:block`)**: High-density semantic `<table>` with `tabular-nums` for numbers/dates.
+- **Mobile & Tablet View (`grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden`)**: Structured `<article>` cards with thumb-friendly action buttons in the card footer.
 
 ---
 

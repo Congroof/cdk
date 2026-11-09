@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Circle,
+  Clock,
   Eye,
+  MessageSquare,
   MessageSquareReply,
   MessageSquareText,
   RefreshCw,
@@ -16,6 +16,13 @@ import api from '../api';
 import type { FeedbackListResponse, UserFeedback } from '../types';
 import { formatDate } from '../utils/format';
 import { useToast } from './toastContext';
+import StatCard from './ui/StatCard';
+import Badge from './ui/Badge';
+import ResponsiveModal from './ui/ResponsiveModal';
+import Pagination from './ui/Pagination';
+import EmptyState from './ui/EmptyState';
+import Skeleton from './ui/Skeleton';
+import CopyButton from './CopyButton';
 
 const typeFilters = [
   { value: '', label: '全部类型' },
@@ -32,12 +39,15 @@ const doneFilters = [
   { value: 'true', label: '已完成' },
 ];
 
-const typeLabel: Record<string, string> = {
-  general: '通用',
-  bug: '问题',
-  feature: '建议',
-  payment: '支付',
-  activation: '激活',
+const typeConfig: Record<
+  string,
+  { label: string; variant: 'default' | 'danger' | 'purple' | 'warning' | 'brand' }
+> = {
+  general: { label: '通用', variant: 'default' },
+  bug: { label: '问题', variant: 'danger' },
+  feature: { label: '建议', variant: 'purple' },
+  payment: { label: '支付', variant: 'warning' },
+  activation: { label: '激活', variant: 'brand' },
 };
 
 export default function FeedbackList() {
@@ -92,7 +102,13 @@ export default function FeedbackList() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
-    setSearch(searchInput);
+    setSearch(searchInput.trim());
+  };
+
+  const handleClearSearch = () => {
+    setSearchInput('');
+    setPage(1);
+    setSearch('');
   };
 
   const handleTypeChange = (value: string) => {
@@ -168,55 +184,60 @@ export default function FeedbackList() {
     }
   };
 
-  const totalPages = Math.ceil(total / pageSize);
-
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white/[0.03] border border-white/5 rounded-xl p-5">
-          <div className="text-sm text-slate-400 mb-1">反馈总数</div>
-          <div className="text-2xl font-bold bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">
-            {pending + done}
-          </div>
-        </div>
-        <div className="bg-white/[0.03] border border-white/5 rounded-xl p-5">
-          <div className="text-sm text-slate-400 mb-1">待处理</div>
-          <div className="text-2xl font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
-            {pending}
-          </div>
-        </div>
-        <div className="bg-white/[0.03] border border-white/5 rounded-xl p-5">
-          <div className="text-sm text-slate-400 mb-1">已完成</div>
-          <div className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-500 bg-clip-text text-transparent">
-            {done}
-          </div>
-        </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <StatCard
+          label="反馈工单总数"
+          value={pending + done}
+          subtitle="累计收到的客户端用户反馈"
+          icon={MessageSquare}
+          tone="blue"
+        />
+        <StatCard
+          label="待处理反馈"
+          value={pending}
+          subtitle="等待管理员排查或回复"
+          icon={Clock}
+          tone="amber"
+        />
+        <StatCard
+          label="已完成反馈"
+          value={done}
+          subtitle="已解决或归档的工单"
+          icon={CheckCircle2}
+          tone="emerald"
+        />
       </div>
 
-      <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
-        <div className="flex items-center gap-2 flex-wrap">
+      {/* Filter & Search Toolbar */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-3.5 sm:p-4">
+        <div className="flex flex-wrap items-center gap-1.5">
           {doneFilters.map((filter) => (
             <button
               key={filter.value}
+              type="button"
               onClick={() => handleDoneFilterChange(filter.value)}
-              className={`px-3 py-1.5 text-sm rounded-lg border transition-all ${
+              className={`rounded-xl border px-3 py-1.5 text-xs sm:text-sm font-medium transition-all ${
                 doneFilter === filter.value
-                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                  : 'text-slate-400 border-white/5 hover:bg-white/5'
+                  ? 'border-blue-500/30 bg-blue-500/15 text-blue-300'
+                  : 'border-transparent text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
               }`}
             >
               {filter.label}
             </button>
           ))}
-          <div className="w-px h-6 bg-white/10 mx-1 hidden sm:block" />
+          <div className="mx-1 hidden sm:block h-5 w-px bg-white/10" />
           {typeFilters.map((filter) => (
             <button
               key={filter.value}
+              type="button"
               onClick={() => handleTypeChange(filter.value)}
-              className={`px-3 py-1.5 text-sm rounded-lg border transition-all ${
+              className={`rounded-xl border px-3 py-1.5 text-xs sm:text-sm font-medium transition-all ${
                 feedbackType === filter.value
-                  ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
-                  : 'text-slate-400 border-white/5 hover:bg-white/5'
+                  ? 'border-cyan-500/30 bg-cyan-500/15 text-cyan-300'
+                  : 'border-transparent text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
               }`}
             >
               {filter.label}
@@ -224,323 +245,446 @@ export default function FeedbackList() {
           ))}
         </div>
 
-        <div className="flex items-center gap-3">
-          <form onSubmit={handleSearch} className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+        <div className="flex items-center gap-2">
+          <form onSubmit={handleSearch} className="relative flex-1 sm:w-72">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
             <input
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="搜索内容 / 联系方式 / 机器码"
-              className="pl-10 pr-4 py-2 text-sm bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all w-72"
+              placeholder="搜索内容 / 联系方式 / 机器码..."
+              className="h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] pl-10 pr-8 text-sm text-white placeholder-slate-500 transition-all focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 hover:text-slate-300"
+                aria-label="清空搜索"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </form>
           <button
-            onClick={fetchData}
+            type="button"
+            onClick={() => void fetchData()}
             disabled={loading}
-            className="p-2.5 hover:bg-white/5 border border-white/10 rounded-xl transition-colors"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-slate-300 transition-colors hover:bg-white/[0.07]"
             title="刷新"
           >
-            <RefreshCw className={`w-4 h-4 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />
           </button>
         </div>
       </div>
 
-      <div className="overflow-hidden border border-white/5 rounded-xl">
-        <table className="w-full table-fixed text-sm">
-          <thead>
-            <tr className="border-b border-white/5 bg-white/[0.02]">
-              <th className="text-left px-4 py-3 font-medium text-slate-400">反馈内容</th>
-              <th className="w-[360px] text-right px-4 py-3 font-medium text-slate-400">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length === 0 ? (
-              <tr>
-                <td colSpan={2} className="text-center py-16 text-slate-500">
-                  {loading ? '加载中...' : '暂无反馈记录'}
-                </td>
-              </tr>
-            ) : (
-              items.map((item) => (
-                <tr
-                  key={item.id}
-                  className="border-b border-white/5 hover:bg-white/[0.02] transition-colors align-top"
-                >
-                  <td className="px-4 py-3">
-                    <div className="min-h-10 flex items-center">
-                      <p
-                        className="w-full text-slate-200 truncate leading-6"
-                        title={item.content}
-                      >
-                        {item.content}
-                      </p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => setViewingItem(item)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 bg-blue-500/5 hover:bg-blue-500/10 border border-blue-500/10 rounded-lg transition-all"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        查看详情
-                      </button>
-                      <button
-                        onClick={() => openReplyEditor(item)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-400 hover:text-indigo-300 bg-indigo-500/5 hover:bg-indigo-500/10 border border-indigo-500/10 rounded-lg transition-all"
-                      >
-                        <MessageSquareReply className="w-3.5 h-3.5" />
-                        {item.reply ? '编辑回复' : '回复'}
-                      </button>
-                      <button
-                        onClick={() => handleSetDone(item, !item.is_done)}
-                        disabled={updatingId === item.id}
-                        className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium border rounded-lg transition-all disabled:opacity-50 ${
-                          item.is_done
-                            ? 'text-amber-400 hover:text-amber-300 bg-amber-500/5 hover:bg-amber-500/10 border-amber-500/10'
-                            : 'text-emerald-400 hover:text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 border-emerald-500/10'
-                        }`}
-                      >
-                        {item.is_done ? (
-                          <Circle className="w-3.5 h-3.5" />
-                        ) : (
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                        )}
-                        {item.is_done ? '重新打开' : '标记完成'}
-                      </button>
-                    </div>
-                  </td>
+      {/* Data View */}
+      {loading && items.length === 0 ? (
+        <Skeleton rows={5} />
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={MessageSquareText}
+          title="暂无匹配的反馈记录"
+          description="尝试调整筛选状态、反馈分类或清空搜索关键词。"
+        />
+      ) : (
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02]">
+            <table className="w-full table-fixed text-sm">
+              <thead>
+                <tr className="border-b border-white/[0.06] bg-white/[0.02] text-xs font-medium uppercase tracking-wider text-slate-400">
+                  <th className="w-40 px-4 py-3.5 text-left">类型 / 状态</th>
+                  <th className="px-4 py-3.5 text-left">反馈内容与回复摘要</th>
+                  <th className="w-48 px-4 py-3.5 text-left">来源信息</th>
+                  <th className="w-40 px-4 py-3.5 text-left">提交时间</th>
+                  <th className="w-64 px-4 py-3.5 text-right">操作</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody className="divide-y divide-white/[0.05]">
+                {items.map((item) => {
+                  const typeMeta = typeConfig[item.feedback_type] ?? {
+                    label: item.feedback_type,
+                    variant: 'default' as const,
+                  };
+                  return (
+                    <tr
+                      key={item.id}
+                      className="align-top transition-colors hover:bg-white/[0.025]"
+                    >
+                      <td className="px-4 py-3.5">
+                        <div className="flex flex-col items-start gap-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant={typeMeta.variant}>{typeMeta.label}</Badge>
+                            <Badge variant={item.is_done ? 'success' : 'warning'} dot>
+                              {item.is_done ? '已完成' : '待处理'}
+                            </Badge>
+                          </div>
+                          {item.reply && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-300">
+                              <MessageSquareReply className="h-3 w-3" />
+                              已回复
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-500">
-            共 {total} 条，第 {page}/{totalPages} 页
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage(page - 1)}
-              disabled={page <= 1}
-              className="p-2 hover:bg-white/5 border border-white/10 rounded-lg disabled:opacity-30 transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setPage(page + 1)}
-              disabled={page >= totalPages}
-              className="p-2 hover:bg-white/5 border border-white/10 rounded-lg disabled:opacity-30 transition-colors"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+                      <td className="px-4 py-3.5">
+                        <p
+                          className="line-clamp-2 text-slate-200 leading-relaxed break-words cursor-pointer hover:text-white"
+                          onClick={() => setViewingItem(item)}
+                          title={item.content}
+                        >
+                          {item.content}
+                        </p>
+                        {item.reply && (
+                          <p className="mt-1.5 truncate rounded-lg border border-indigo-500/15 bg-indigo-500/[0.06] px-2.5 py-1 text-xs text-indigo-200/90">
+                            回复：{item.reply}
+                          </p>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3.5 text-xs">
+                        <div className="truncate text-slate-300" title={item.contact ?? undefined}>
+                          <span className="text-slate-500 mr-1">联系:</span>
+                          {item.contact || '未提供'}
+                        </div>
+                        <div className="mt-1 truncate text-slate-400 font-mono">
+                          <span className="font-sans text-slate-500 mr-1">版本:</span>
+                          {item.app_version || '-'}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3.5 text-xs text-slate-400 tabular-nums">
+                        {formatDate(item.created_at)}
+                      </td>
+
+                      <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setViewingItem(item)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-blue-500/15 bg-blue-500/[0.06] px-2.5 py-1.5 text-xs font-medium text-blue-300 transition-all hover:bg-blue-500/15"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            详情
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openReplyEditor(item)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-indigo-500/15 bg-indigo-500/[0.06] px-2.5 py-1.5 text-xs font-medium text-indigo-300 transition-all hover:bg-indigo-500/15"
+                          >
+                            <MessageSquareReply className="h-3.5 w-3.5" />
+                            {item.reply ? '改回复' : '回复'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSetDone(item, !item.is_done)}
+                            disabled={updatingId === item.id}
+                            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all disabled:opacity-50 ${
+                              item.is_done
+                                ? 'border-amber-500/15 bg-amber-500/[0.06] text-amber-300 hover:bg-amber-500/15'
+                                : 'border-emerald-500/15 bg-emerald-500/[0.06] text-emerald-300 hover:bg-emerald-500/15'
+                            }`}
+                          >
+                            {item.is_done ? (
+                              <Circle className="h-3.5 w-3.5" />
+                            ) : (
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            )}
+                            {item.is_done ? '重开' : '完成'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </div>
+
+          {/* Mobile & Tablet Card Stream */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden">
+            {items.map((item) => {
+              const typeMeta = typeConfig[item.feedback_type] ?? {
+                label: item.feedback_type,
+                variant: 'default' as const,
+              };
+              return (
+                <article
+                  key={item.id}
+                  className="flex flex-col justify-between rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 space-y-3"
+                >
+                  <div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant={typeMeta.variant}>{typeMeta.label}</Badge>
+                        <Badge variant={item.is_done ? 'success' : 'warning'} dot>
+                          {item.is_done ? '已完成' : '待处理'}
+                        </Badge>
+                        {item.reply && <Badge variant="purple">已回复</Badge>}
+                      </div>
+                      <span className="text-xs text-slate-500 tabular-nums">
+                        {formatDate(item.created_at)}
+                      </span>
+                    </div>
+
+                    <p
+                      onClick={() => setViewingItem(item)}
+                      className="mt-3 line-clamp-3 text-sm text-slate-200 leading-relaxed break-words"
+                    >
+                      {item.content}
+                    </p>
+
+                    {item.reply && (
+                      <div className="mt-2.5 rounded-xl border border-indigo-500/20 bg-indigo-500/[0.07] px-3 py-2 text-xs text-indigo-200">
+                        <span className="font-medium text-indigo-300">管理员回复：</span>
+                        <span className="line-clamp-2 mt-0.5 block">{item.reply}</span>
+                      </div>
+                    )}
+
+                    {(item.contact || item.app_version) && (
+                      <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                        {item.contact && <span>联系: {item.contact}</span>}
+                        {item.app_version && <span>版本: {item.app_version}</span>}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 border-t border-white/[0.05] pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setViewingItem(item)}
+                      className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl border border-blue-500/20 bg-blue-500/10 py-2 text-xs font-medium text-blue-300"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      详情
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openReplyEditor(item)}
+                      className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl border border-indigo-500/20 bg-indigo-500/10 py-2 text-xs font-medium text-indigo-300"
+                    >
+                      <MessageSquareReply className="h-3.5 w-3.5" />
+                      {item.reply ? '改回复' : '回复'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetDone(item, !item.is_done)}
+                      disabled={updatingId === item.id}
+                      className={`inline-flex flex-1 items-center justify-center gap-1 rounded-xl border py-2 text-xs font-medium disabled:opacity-50 ${
+                        item.is_done
+                          ? 'border-amber-500/20 bg-amber-500/10 text-amber-300'
+                          : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                      }`}
+                    >
+                      {item.is_done ? (
+                        <Circle className="h-3.5 w-3.5" />
+                      ) : (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      )}
+                      {item.is_done ? '重新打开' : '标记完成'}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <Pagination
+            total={total}
+            page={page}
+            pageSize={pageSize}
+            loading={loading}
+            onPageChange={setPage}
+          />
+        </>
       )}
 
-      {viewingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setViewingItem(null)}
-          />
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="feedback-detail-title"
-            className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl mx-4"
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-white/5 px-6 py-5">
-              <div>
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-medium border rounded-full bg-sky-500/10 text-sky-400 border-sky-500/20">
-                    <MessageSquareText className="w-3 h-3" />
-                    {typeLabel[viewingItem.feedback_type] || viewingItem.feedback_type}
-                  </span>
-                  <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-medium border rounded-full ${
-                      viewingItem.is_done
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                    }`}
-                  >
-                    {viewingItem.is_done ? (
-                      <CheckCircle2 className="w-3 h-3" />
-                    ) : (
-                      <Circle className="w-3 h-3" />
-                    )}
-                    {viewingItem.is_done ? '已完成' : '待处理'}
-                  </span>
-                </div>
-                <h3 id="feedback-detail-title" className="text-lg font-semibold text-white">
-                  反馈详情
-                </h3>
-                <p className="text-sm text-slate-500 mt-1">
-                  提交于 {formatDate(viewingItem.created_at)}
-                </p>
-              </div>
+      {/* Detail Modal */}
+      <ResponsiveModal
+        open={Boolean(viewingItem)}
+        onClose={() => setViewingItem(null)}
+        title="用户反馈详情"
+        description={viewingItem ? `提交于 ${formatDate(viewingItem.created_at)}` : undefined}
+        size="xl"
+        footer={
+          viewingItem ? (
+            <div className="flex items-center justify-between gap-3">
               <button
                 type="button"
-                onClick={() => setViewingItem(null)}
-                className="p-1.5 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                aria-label="关闭"
+                onClick={() => {
+                  const target = viewingItem;
+                  setViewingItem(null);
+                  openReplyEditor(target);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-500/30 bg-indigo-500/15 px-4 py-2 text-xs sm:text-sm font-medium text-indigo-300 transition-colors hover:bg-indigo-500/25"
               >
-                <X className="w-5 h-5" />
+                <MessageSquareReply className="h-4 w-4" />
+                {viewingItem.reply ? '编辑回复' : '撰写回复'}
               </button>
-            </div>
-
-            <div className="space-y-5 overflow-y-auto px-6 py-5">
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-2">
-                  反馈内容
-                </div>
-                <div className="rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
-                  <p className="text-sm text-slate-200 whitespace-pre-wrap break-words leading-6">
-                    {viewingItem.content}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <DetailItem label="联系方式" value={viewingItem.contact || '未提供'} />
-                <DetailItem label="应用版本" value={viewingItem.app_version || '未提供'} />
-                <DetailItem label="平台" value={viewingItem.platform || '未提供'} />
-                <DetailItem
-                  label="完成时间"
-                  value={viewingItem.done_at ? formatDate(viewingItem.done_at) : '尚未完成'}
-                />
-                <DetailItem label="机器码" value={viewingItem.machine_code || '未提供'} mono />
-                <DetailItem label="CDK" value={viewingItem.cdk_code || '未提供'} mono />
-              </div>
-
-              {viewingItem.metadata !== null && (
-                <div>
-                  <div className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-2">
-                    附加信息
-                  </div>
-                  <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-xl border border-white/5 bg-black/20 px-4 py-3 text-xs text-slate-400">
-                    {typeof viewingItem.metadata === 'string'
-                      ? viewingItem.metadata
-                      : JSON.stringify(viewingItem.metadata, null, 2)}
-                  </pre>
-                </div>
-              )}
-
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-2">
-                  管理员回复
-                </div>
-                {viewingItem.reply ? (
-                  <div className="rounded-xl border border-indigo-500/15 bg-indigo-500/5 px-4 py-3">
-                    <div className="flex items-center gap-1.5 text-xs text-indigo-300 mb-2">
-                      <MessageSquareReply className="w-3.5 h-3.5" />
-                      已回复
-                      {viewingItem.replied_at && (
-                        <span className="text-slate-500">
-                          · {formatDate(viewingItem.replied_at)}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-slate-200 whitespace-pre-wrap break-words leading-6">
-                      {viewingItem.reply}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-center text-sm text-slate-500">
-                    暂无管理员回复
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end border-t border-white/5 px-6 py-4">
               <button
                 type="button"
                 onClick={() => setViewingItem(null)}
-                className="px-4 py-2 text-sm text-slate-300 hover:text-white border border-white/10 rounded-xl transition-colors"
+                className="rounded-xl border border-white/10 px-4 py-2 text-xs sm:text-sm font-medium text-slate-300 transition-colors hover:bg-white/5"
               >
                 关闭
               </button>
             </div>
-          </section>
-        </div>
-      )}
-
-      {replyingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeReplyEditor} />
-          <form
-            onSubmit={handleSaveReply}
-            className="relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6"
-          >
-            <div className="flex items-start justify-between gap-4 mb-5">
-              <div>
-                <h3 className="text-lg font-semibold text-white">
-                  {replyingItem.reply ? '编辑反馈回复' : '回复反馈'}
-                </h3>
-                <p className="text-sm text-slate-500 mt-1 line-clamp-2">
-                  {replyingItem.content}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeReplyEditor}
-                disabled={savingReply}
-                className="p-1.5 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors disabled:opacity-50"
-                aria-label="关闭"
+          ) : undefined
+        }
+      >
+        {viewingItem && (
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant={(typeConfig[viewingItem.feedback_type] ?? { variant: 'default' }).variant}
               >
-                <X className="w-5 h-5" />
-              </button>
+                {(typeConfig[viewingItem.feedback_type] ?? { label: viewingItem.feedback_type }).label}
+              </Badge>
+              <Badge variant={viewingItem.is_done ? 'success' : 'warning'} dot>
+                {viewingItem.is_done ? '已完成' : '待处理'}
+              </Badge>
             </div>
 
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-2">
+                反馈正文
+              </div>
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-3.5">
+                <p className="text-sm text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
+                  {viewingItem.content}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <DetailItem label="联系方式" value={viewingItem.contact || '未提供'} />
+              <DetailItem label="应用版本" value={viewingItem.app_version || '未提供'} />
+              <DetailItem label="运行平台" value={viewingItem.platform || '未提供'} />
+              <DetailItem
+                label="完成时间"
+                value={viewingItem.done_at ? formatDate(viewingItem.done_at) : '尚未完成'}
+              />
+              <DetailItem label="机器码" value={viewingItem.machine_code || '未提供'} mono copyable={Boolean(viewingItem.machine_code)} />
+              <DetailItem label="关联 CDK" value={viewingItem.cdk_code || '未提供'} mono copyable={Boolean(viewingItem.cdk_code)} />
+            </div>
+
+            {viewingItem.metadata !== null && (
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-2">
+                  客户端附加诊断信息
+                </div>
+                <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-2xl border border-white/[0.06] bg-black/30 px-4 py-3 text-xs text-slate-400 font-mono">
+                  {typeof viewingItem.metadata === 'string'
+                    ? viewingItem.metadata
+                    : JSON.stringify(viewingItem.metadata, null, 2)}
+                </pre>
+              </div>
+            )}
+
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wider text-slate-500 mb-2">
+                管理员回复
+              </div>
+              {viewingItem.reply ? (
+                <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.06] px-4 py-3.5">
+                  <div className="flex items-center gap-1.5 text-xs text-indigo-300 mb-2">
+                    <MessageSquareReply className="h-3.5 w-3.5" />
+                    已回复
+                    {viewingItem.replied_at && (
+                      <span className="text-slate-500 tabular-nums">
+                        · {formatDate(viewingItem.replied_at)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
+                    {viewingItem.reply}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.015] px-4 py-6 text-center text-xs sm:text-sm text-slate-500">
+                  暂无管理员回复
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </ResponsiveModal>
+
+      {/* Reply Editor Modal */}
+      <ResponsiveModal
+        open={Boolean(replyingItem)}
+        onClose={closeReplyEditor}
+        title={replyingItem?.reply ? '编辑反馈回复' : '回复用户反馈'}
+        description={
+          replyingItem ? (
+            <span className="line-clamp-2 block text-slate-400">{replyingItem.content}</span>
+          ) : undefined
+        }
+        size="lg"
+      >
+        <form onSubmit={handleSaveReply} className="space-y-4">
+          <div>
             <textarea
               value={replyInput}
               onChange={(e) => setReplyInput(e.target.value)}
               maxLength={5000}
-              rows={7}
+              rows={6}
               autoFocus
-              placeholder="输入处理结果、计划或其他需要告知客户端用户的内容"
-              className="w-full resize-y rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              placeholder="输入处理结果、修复进度或其他需要告知客户端用户的内容..."
+              className="w-full resize-y rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-indigo-500/40 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
             />
-            <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
-              <span>回复与完成状态相互独立</span>
-              <span>{replyInput.length}/5000</span>
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-500 tabular-nums">
+              <span>回复保存后客户端即可拉取查看</span>
+              <span>{replyInput.length} / 5000</span>
             </div>
+          </div>
 
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                type="button"
-                onClick={closeReplyEditor}
-                disabled={savingReply}
-                className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-white/10 rounded-xl transition-colors disabled:opacity-50"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                disabled={savingReply || !replyInput.trim()}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors disabled:opacity-50"
-              >
-                <Send className="w-4 h-4" />
-                {savingReply ? '保存中...' : '保存回复'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={closeReplyEditor}
+              disabled={savingReply}
+              className="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={savingReply || !replyInput.trim()}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition-all hover:from-indigo-600 hover:to-blue-700 disabled:opacity-50"
+            >
+              <Send className="h-4 w-4" />
+              {savingReply ? '保存中...' : '保存回复'}
+            </button>
+          </div>
+        </form>
+      </ResponsiveModal>
     </div>
   );
 }
 
-function DetailItem({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+function DetailItem({
+  label,
+  value,
+  mono = false,
+  copyable = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  copyable?: boolean;
+}) {
   return (
-    <div className="rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] px-4 py-3">
       <div className="text-xs text-slate-500 mb-1">{label}</div>
-      <div className={`text-sm text-slate-300 break-all ${mono ? 'font-mono' : ''}`}>{value}</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className={`text-xs sm:text-sm text-slate-200 break-all ${mono ? 'font-mono' : ''}`}>
+          {value}
+        </div>
+        {copyable && <CopyButton text={value} />}
+      </div>
     </div>
   );
 }

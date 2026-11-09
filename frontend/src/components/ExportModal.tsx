@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { X, Loader2, Download } from 'lucide-react';
+import { Loader2, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api from '../api';
 import { useToast } from './toastContext';
 import type { Cdk } from '../types';
+import ResponsiveModal from './ui/ResponsiveModal';
+import Select from './ui/Select';
 
 interface Props {
   open: boolean;
@@ -33,7 +35,10 @@ export default function ExportModal({ open, onClose }: Props) {
       if (!res.data.success) return;
 
       const statusMap: Record<string, string> = {
-        unused: '未使用', activated: '已激活', expired: '已过期', disabled: '已禁用',
+        unused: '未使用',
+        activated: '已激活',
+        expired: '已过期',
+        disabled: '已禁用',
       };
       const unitMap: Record<string, string> = { days: '天', hours: '小时' };
 
@@ -46,8 +51,11 @@ export default function ExportModal({ open, onClose }: Props) {
       const formatDate = (d: string | null) => {
         if (!d) return '';
         return new Date(d + 'Z').toLocaleString('zh-CN', {
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit'
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
         });
       };
 
@@ -66,8 +74,14 @@ export default function ExportModal({ open, onClose }: Props) {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'CDK');
       ws['!cols'] = [
-        { wch: 30 }, { wch: 8 }, { wch: 12 }, { wch: 40 },
-        { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
+        { wch: 30 },
+        { wch: 8 },
+        { wch: 12 },
+        { wch: 40 },
+        { wch: 20 },
+        { wch: 20 },
+        { wch: 20 },
+        { wch: 20 },
       ];
 
       const dateSuffix = new Date().toISOString().slice(0, 10);
@@ -81,52 +95,45 @@ export default function ExportModal({ open, onClose }: Props) {
     }
   };
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-sm mx-4">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
-          <h2 className="text-lg font-semibold">导出 CDK 数据</h2>
-          <button onClick={onClose} className="p-1.5 hover:bg-white/5 rounded-lg transition-colors">
-            <X className="w-5 h-5 text-slate-400" />
-          </button>
+    <ResponsiveModal
+      open={open}
+      onClose={onClose}
+      title="导出 CDK 数据"
+      description="按状态筛选并生成标准 Excel (.xlsx) 报表文件"
+      size="sm"
+    >
+      <div className="space-y-5">
+        <div>
+          <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-2">
+            导出状态范围
+          </label>
+          <Select
+            value={status}
+            options={statusOptions}
+            onChange={setStatus}
+          />
         </div>
 
-        <div className="p-6 space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">状态筛选</label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all appearance-none"
-            >
-              {statusOptions.map((o) => (
-                <option key={o.value} value={o.value} className="bg-slate-900">{o.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            onClick={handleExport}
-            disabled={loading}
-            className="w-full py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                导出中...
-              </>
-            ) : (
-              <>
-                <Download className="w-5 h-5" />
-                导出 Excel
-              </>
-            )}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={loading}
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 transition-all hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              正在生成 Excel...
+            </>
+          ) : (
+            <>
+              <Download className="h-4 w-4" />
+              立即导出 Excel
+            </>
+          )}
+        </button>
       </div>
-    </div>
+    </ResponsiveModal>
   );
 }

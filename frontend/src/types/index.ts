@@ -1,5 +1,14 @@
 export type CdkStatus = 'unused' | 'activated' | 'expired' | 'disabled';
 export type ValidUnit = 'days' | 'hours';
+export type DashboardTab =
+  | 'cdk'
+  | 'multiDevice'
+  | 'banned'
+  | 'stats'
+  | 'feedback'
+  | 'announcement'
+  | 'skinforge'
+  | 'mods';
 
 export interface Cdk {
   id: number;

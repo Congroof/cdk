@@ -27,9 +27,19 @@ frontend/
     │   └── index.ts        # Axios instance + interceptors
     ├── assets/
     │   └── hero.png        # Static images
-    ├── components/         # Reusable UI components
-    │   ├── Layout.tsx      # Page shell (sidebar/header)
-    │   ├── CDKTable.tsx    # CDK data table with pagination
+    ├── components/         # Reusable business & UI components
+    │   ├── ui/             # Atomic shadcn/ui-style design system primitives
+    │   │   ├── Badge.tsx           # Semantic status & category badges
+    │   │   ├── EmptyState.tsx      # Empty list/search placeholder
+    │   │   ├── FileDropzone.tsx    # Drag-and-drop JSON manifest uploader
+    │   │   ├── Pagination.tsx      # Responsive pagination bar
+    │   │   ├── ResponsiveModal.tsx # PC Dialog + Mobile Bottom Sheet modal
+    │   │   ├── Select.tsx          # Custom dark-themed dropdown select
+    │   │   ├── Skeleton.tsx        # Loading pulse skeleton
+    │   │   ├── StatCard.tsx        # KPI metric card with tabular-nums
+    │   │   └── Switch.tsx          # Accessible toggle switch
+    │   ├── Layout.tsx      # Responsive shell (PC grouped sidebar + Mobile bottom bar & drawer)
+    │   ├── CDKTable.tsx    # CDK data view (PC table + Mobile card stream)
     │   ├── CreateModal.tsx # CDK generation form modal
     │   ├── ExportModal.tsx # Export filter modal
     │   ├── Toast.tsx       # Toast provider and rendered notifications

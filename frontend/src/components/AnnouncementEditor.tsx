@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { Megaphone, RefreshCw, Save } from 'lucide-react';
+import { Eye, Megaphone, RefreshCw, Save } from 'lucide-react';
 import api from '../api';
 import type { Announcement } from '../types';
 import { formatDate } from '../utils/format';
 import { useToast } from './toastContext';
+import Switch from './ui/Switch';
+import Badge from './ui/Badge';
+import Skeleton from './ui/Skeleton';
 
 const MAX_TITLE_LEN = 128;
 const MAX_CONTENT_LEN = 10_000;
@@ -87,49 +90,57 @@ export default function AnnouncementEditor() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24 text-slate-400">
-        <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
-        正在加载公告...
-      </div>
-    );
+    return <Skeleton rows={4} />;
   }
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Megaphone className="w-5 h-5 text-violet-400" />
-            <h2 className="text-lg font-semibold text-slate-100">
-              {announcement ? '修改公告' : '创建公告'}
-            </h2>
-          </div>
-          <p className="text-sm text-slate-400">
-            公告将通过用户名专属客户端接口公开，停用后客户端会获得空数据。
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void fetchAnnouncement()}
-          disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 text-sm text-slate-300 border border-white/10 rounded-xl hover:bg-white/5 disabled:opacity-50 transition-colors"
-        >
-          <RefreshCw className="w-4 h-4" />
-          重新加载
-        </button>
-      </div>
-
+    <div className="grid grid-cols-1 xl:grid-cols-5 gap-6 items-start">
+      {/* Editor Column */}
       <form
         onSubmit={handleSubmit}
-        className="bg-white/[0.03] border border-white/5 rounded-2xl p-5 sm:p-6 space-y-6"
+        className="xl:col-span-3 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5 sm:p-6 space-y-6 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
       >
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-500/25 bg-violet-500/10 text-violet-400">
+              <Megaphone className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-semibold text-white">
+                  {announcement ? '编辑客户端公告' : '创建客户端公告'}
+                </h2>
+                <Badge variant={isEnabled ? 'success' : 'default'} dot>
+                  {isEnabled ? '已启用' : '草稿停用'}
+                </Badge>
+              </div>
+              <p className="mt-0.5 text-xs text-slate-400">
+                公告通过公开接口下发给客户端，停用后客户端将收到空数据。
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void fetchAnnouncement()}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.07] disabled:opacity-50"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            重新加载
+          </button>
+        </div>
+
         <div>
           <div className="flex items-center justify-between gap-4 mb-2">
-            <label htmlFor="announcement-title" className="text-sm font-medium text-slate-300">
+            <label htmlFor="announcement-title" className="text-xs sm:text-sm font-medium text-slate-300">
               公告标题
             </label>
-            <span className={`text-xs ${titleLength > MAX_TITLE_LEN ? 'text-red-400' : 'text-slate-500'}`}>
+            <span
+              className={`text-xs tabular-nums ${
+                titleLength > MAX_TITLE_LEN ? 'text-rose-400' : 'text-slate-500'
+              }`}
+            >
               {titleLength} / {MAX_TITLE_LEN}
             </span>
           </div>
@@ -138,18 +149,22 @@ export default function AnnouncementEditor() {
             type="text"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="请输入公告标题"
+            placeholder="例如：SkinForge v2.4 版本更新与维护通知"
             disabled={saving}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/40 disabled:opacity-60 transition-all"
+            className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-slate-100 placeholder-slate-500 transition-all focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
           />
         </div>
 
         <div>
           <div className="flex items-center justify-between gap-4 mb-2">
-            <label htmlFor="announcement-content" className="text-sm font-medium text-slate-300">
+            <label htmlFor="announcement-content" className="text-xs sm:text-sm font-medium text-slate-300">
               公告正文
             </label>
-            <span className={`text-xs ${contentLength > MAX_CONTENT_LEN ? 'text-red-400' : 'text-slate-500'}`}>
+            <span
+              className={`text-xs tabular-nums ${
+                contentLength > MAX_CONTENT_LEN ? 'text-rose-400' : 'text-slate-500'
+              }`}
+            >
               {contentLength} / {MAX_CONTENT_LEN}
             </span>
           </div>
@@ -157,46 +172,69 @@ export default function AnnouncementEditor() {
             id="announcement-content"
             value={content}
             onChange={(event) => setContent(event.target.value)}
-            placeholder="请输入公告正文，支持多行纯文本"
+            placeholder="请输入公告正文，支持多行纯文本段落..."
             disabled={saving}
-            rows={12}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-slate-100 placeholder-slate-500 leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/40 disabled:opacity-60 transition-all"
+            rows={11}
+            className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-100 placeholder-slate-500 leading-relaxed resize-y transition-all focus:border-blue-500/40 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
           />
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
-          <label className="flex items-center gap-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={isEnabled}
-              onChange={(event) => setIsEnabled(event.target.checked)}
-              disabled={saving}
-              className="w-4 h-4 rounded border-white/20 bg-white/5 text-violet-500 focus:ring-violet-500/40"
-            />
-            <span>
-              <span className="block text-sm font-medium text-slate-300">对客户端启用</span>
-              <span className="block text-xs text-slate-500 mt-0.5">
-                关闭后保留草稿，但客户端不会读取到内容
-              </span>
-            </span>
-          </label>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-black/20 p-4">
+          <Switch
+            checked={isEnabled}
+            onChange={setIsEnabled}
+            disabled={saving}
+            label="对客户端公开启用"
+            description="关闭后仍可保存为草稿，但客户端不会展示弹窗或横幅公告"
+          />
 
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white text-sm font-medium rounded-xl shadow-lg shadow-violet-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-6 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 transition-all hover:from-blue-600 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {saving ? '保存中...' : announcement ? '保存修改' : '创建公告'}
+            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? '保存中...' : announcement ? '保存修改' : '发布公告'}
           </button>
         </div>
 
         {announcement && (
-          <div className="pt-4 border-t border-white/5 text-xs text-slate-500">
+          <div className="text-xs text-slate-500 tabular-nums">
             最后更新时间：{formatDate(announcement.updated_at)}
           </div>
         )}
       </form>
+
+      {/* Live Preview Column */}
+      <aside className="xl:col-span-2 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 sm:p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+            <Eye className="h-4 w-4 text-blue-400" />
+            客户端展示实时预览
+          </div>
+          <Badge variant={isEnabled ? 'brand' : 'default'}>
+            {isEnabled ? '客户端可见' : '客户端隐藏'}
+          </Badge>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-[#0b1120] p-5 shadow-xl">
+          <div className="flex items-center gap-2.5 border-b border-white/[0.06] pb-3.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400">
+              <Megaphone className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-white">
+                {title.trim() || '（未填写公告标题）'}
+              </div>
+              <div className="text-[11px] text-slate-500">系统公告</div>
+            </div>
+          </div>
+
+          <div className="mt-4 max-h-72 overflow-y-auto text-xs sm:text-sm text-slate-300 whitespace-pre-wrap break-words leading-relaxed">
+            {content.trim() || '在左侧输入公告正文后，此处将实时呈现段落排版效果...'}
+          </div>
+        </div>
+      </aside>
     </div>
   );
 }

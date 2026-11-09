@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import axios from 'axios';
-import { X, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import api from '../api';
 import { useToast } from './toastContext';
 import type { Cdk, ValidUnit } from '../types';
@@ -13,6 +13,7 @@ import {
   getValidCustomCdkDuration,
 } from '../utils/cdkOptions';
 import { formatDate } from '../utils/format';
+import ResponsiveModal from './ui/ResponsiveModal';
 
 interface Props {
   cdk: Cdk | null;
@@ -29,7 +30,9 @@ export default function EditValidityModal({ cdk, onClose, onSaved }: Props) {
   const [customUnit, setCustomUnit] = useState<ValidUnit>(getDefaultCustomCdkUnit);
   const [loading, setLoading] = useState(false);
 
-  const submitDuration = usingCustomDuration ? getValidCustomCdkDuration(customDuration) : validDuration;
+  const submitDuration = usingCustomDuration
+    ? getValidCustomCdkDuration(customDuration)
+    : validDuration;
   const submitUnit: ValidUnit = usingCustomDuration ? customUnit : validUnit;
 
   const previewExpiresAt = useMemo(() => {
@@ -37,9 +40,7 @@ export default function EditValidityModal({ cdk, onClose, onSaved }: Props) {
     return addDurationToDate(cdk.expires_at, submitDuration, submitUnit);
   }, [cdk, submitDuration, submitUnit]);
 
-  if (!cdk) return null;
-
-  const isUnused = cdk.status === 'unused';
+  const isUnused = cdk?.status === 'unused';
 
   const handleDurationSelect = (duration: number, unit: ValidUnit) => {
     setUsingCustomDuration(false);
@@ -49,6 +50,7 @@ export default function EditValidityModal({ cdk, onClose, onSaved }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!cdk) return;
     if (!submitDuration) {
       toast('请输入大于 0 的有效时长', 'error');
       return;
@@ -67,9 +69,10 @@ export default function EditValidityModal({ cdk, onClose, onSaved }: Props) {
         onClose();
       }
     } catch (err: unknown) {
-      const message = axios.isAxiosError(err) && typeof err.response?.data?.error === 'string'
-        ? err.response.data.error
-        : '保存失败';
+      const message =
+        axios.isAxiosError(err) && typeof err.response?.data?.error === 'string'
+          ? err.response.data.error
+          : '保存失败';
       toast(message, 'error');
     } finally {
       setLoading(false);
@@ -77,59 +80,61 @@ export default function EditValidityModal({ cdk, onClose, onSaved }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[80vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
-          <h2 className="text-lg font-semibold">
-            {isUnused ? '修改有效期' : '延长过期时间'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-white/5 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 text-slate-400" />
-          </button>
-        </div>
+    <ResponsiveModal
+      open={Boolean(cdk)}
+      onClose={onClose}
+      title={isUnused ? '修改未激活 CDK 有效期' : '延长已激活 CDK 过期时间'}
+      description={
+        isUnused
+          ? '调整该激活码首次激活后可使用的授权时长'
+          : '在当前过期时间基础上顺延授权时长'
+      }
+      size="lg"
+    >
+      {cdk && (
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 text-xs sm:text-sm">
+            <div>
+              <p className="text-xs text-slate-500 mb-1">目标 CDK 码</p>
+              <code className="break-all font-mono text-blue-300">{cdk.code}</code>
+            </div>
 
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5">
-          <div>
-            <p className="text-sm text-slate-400 mb-1">CDK 码</p>
-            <code className="text-sm text-blue-400 font-mono">{cdk.code}</code>
+            {cdk.status === 'activated' && cdk.expires_at ? (
+              <div>
+                <p className="text-xs text-slate-500 mb-1">当前过期时间</p>
+                <p className="font-medium text-slate-200 tabular-nums">
+                  {formatDate(cdk.expires_at)}
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-xs text-slate-500 mb-1">当前设定有效期</p>
+                <p className="font-medium text-slate-200 tabular-nums">
+                  {cdk.valid_duration} {cdk.valid_unit === 'hours' ? '小时' : '天'}
+                </p>
+              </div>
+            )}
           </div>
 
-          {cdk.status === 'activated' && cdk.expires_at && (
-            <div>
-              <p className="text-sm text-slate-400 mb-1">当前过期时间</p>
-              <p className="text-sm text-slate-200">{formatDate(cdk.expires_at)}</p>
-            </div>
-          )}
-
-          {isUnused && (
-            <div>
-              <p className="text-sm text-slate-400 mb-1">当前有效期</p>
-              <p className="text-sm text-slate-200">
-                {cdk.valid_duration} {cdk.valid_unit === 'hours' ? '小时' : '天'}
-              </p>
-            </div>
-          )}
-
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              {isUnused ? '新有效期' : '延长时长'}
+            <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-2">
+              {isUnused ? '选择新有效期' : '选择延长时长'}
             </label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {CDK_DURATION_OPTIONS.map((option) => {
-                const selected = !usingCustomDuration && validDuration === option.validDuration && validUnit === option.validUnit;
+                const selected =
+                  !usingCustomDuration &&
+                  validDuration === option.validDuration &&
+                  validUnit === option.validUnit;
                 return (
                   <button
                     key={`${option.validDuration}-${option.validUnit}`}
                     type="button"
                     onClick={() => handleDurationSelect(option.validDuration, option.validUnit)}
-                    className={`py-2.5 text-sm font-medium rounded-xl border transition-all ${
+                    className={`h-10 rounded-xl border text-xs sm:text-sm font-medium transition-all ${
                       selected
-                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                        : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
+                        ? 'border-blue-500/35 bg-blue-500/20 text-blue-300'
+                        : 'border-white/10 bg-white/[0.03] text-slate-400 hover:bg-white/[0.07] hover:text-white'
                     }`}
                   >
                     {option.label}
@@ -139,19 +144,20 @@ export default function EditValidityModal({ cdk, onClose, onSaved }: Props) {
               <button
                 type="button"
                 onClick={() => setUsingCustomDuration(true)}
-                className={`py-2.5 text-sm font-medium rounded-xl border transition-all ${
+                className={`h-10 rounded-xl border text-xs sm:text-sm font-medium transition-all ${
                   usingCustomDuration
-                    ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                    : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
+                    ? 'border-blue-500/35 bg-blue-500/20 text-blue-300'
+                    : 'border-white/10 bg-white/[0.03] text-slate-400 hover:bg-white/[0.07] hover:text-white'
                 }`}
               >
                 自定义时长
               </button>
             </div>
+
             {usingCustomDuration && (
-              <div className="mt-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.07] p-3">
+              <div className="mt-3 rounded-2xl border border-blue-500/20 bg-blue-500/[0.06] p-3.5">
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <label className="block flex-1 text-sm font-medium text-slate-300">
+                  <label className="block flex-1 text-xs font-medium text-slate-300">
                     时长数值
                     <input
                       type="number"
@@ -160,22 +166,22 @@ export default function EditValidityModal({ cdk, onClose, onSaved }: Props) {
                       value={customDuration}
                       onChange={(e) => setCustomDuration(Number(e.target.value))}
                       placeholder="例如：7"
-                      className="mt-2 w-full px-3 py-2.5 bg-slate-950/60 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                      className="mt-1.5 h-10 w-full rounded-xl border border-white/10 bg-[#060913]/70 px-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                       required
                     />
                   </label>
-                  <div className="text-sm font-medium text-slate-300">
+                  <div className="text-xs font-medium text-slate-300">
                     单位
-                    <div className="mt-2 grid grid-cols-2 gap-2 sm:w-40">
+                    <div className="mt-1.5 grid grid-cols-2 gap-2 sm:w-40">
                       {(['hours', 'days'] as const).map((unit) => (
                         <button
                           key={unit}
                           type="button"
                           onClick={() => setCustomUnit(unit)}
-                          className={`px-3 py-2.5 rounded-lg border transition-all ${
+                          className={`h-10 rounded-xl border text-xs sm:text-sm font-medium transition-all ${
                             customUnit === unit
-                              ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                              : 'bg-white/5 text-slate-400 border-white/10 hover:text-white hover:bg-white/10'
+                              ? 'border-blue-500/35 bg-blue-500/20 text-blue-300'
+                              : 'border-white/10 bg-white/[0.04] text-slate-400 hover:bg-white/10 hover:text-white'
                           }`}
                         >
                           {unit === 'hours' ? '小时' : '天'}
@@ -184,7 +190,7 @@ export default function EditValidityModal({ cdk, onClose, onSaved }: Props) {
                     </div>
                   </div>
                 </div>
-                <p className="mt-2 text-xs text-blue-200/80">
+                <p className="mt-2.5 text-xs text-blue-300/80">
                   {formatCustomCdkDurationSummary(customDuration, customUnit)}
                 </p>
               </div>
@@ -192,9 +198,9 @@ export default function EditValidityModal({ cdk, onClose, onSaved }: Props) {
           </div>
 
           {cdk.status === 'activated' && previewExpiresAt && (
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] px-4 py-3">
-              <p className="text-xs text-emerald-200/80 mb-1">新过期时间预览</p>
-              <p className="text-sm text-emerald-300">
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] px-4 py-3">
+              <p className="text-xs text-emerald-300/80 mb-1">延期后新过期时间预览</p>
+              <p className="text-sm font-semibold text-emerald-300 tabular-nums">
                 {previewExpiresAt.toLocaleString('zh-CN', {
                   year: 'numeric',
                   month: '2-digit',
@@ -206,22 +212,31 @@ export default function EditValidityModal({ cdk, onClose, onSaved }: Props) {
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                保存中...
-              </>
-            ) : (
-              '保存'
-            )}
-          </button>
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 h-11 rounded-xl border border-white/10 bg-white/[0.03] text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.06]"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 h-11 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 transition-all hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  保存中...
+                </>
+              ) : (
+                '确认保存'
+              )}
+            </button>
+          </div>
         </form>
-      </div>
-    </div>
+      )}
+    </ResponsiveModal>
   );
 }

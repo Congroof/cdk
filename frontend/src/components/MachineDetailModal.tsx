@@ -1,4 +1,3 @@
-import { X } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -11,6 +10,7 @@ import {
 import type { MachineUsageDetail } from '../types';
 import { formatDate, formatTime, formatShortDate, formatDuration } from '../utils/format';
 import CopyButton from './CopyButton';
+import ResponsiveModal from './ui/ResponsiveModal';
 
 interface Props {
   machineCode: string;
@@ -19,39 +19,36 @@ interface Props {
   onClose: () => void;
 }
 
-export default function MachineDetailModal({ machineCode, detail, loading, onClose }: Props) {
+export default function MachineDetailModal({
+  machineCode,
+  detail,
+  loading,
+  onClose,
+}: Props) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] overflow-hidden flex flex-col">
-        <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between shrink-0">
-          <div>
-            <h3 className="text-lg font-semibold">设备使用详情</h3>
-            <code className="text-xs text-slate-400 font-mono mt-1 block break-all">
-              {machineCode}
-            </code>
+    <ResponsiveModal
+      open
+      onClose={onClose}
+      title="设备使用详情"
+      description={
+        <span className="inline-flex items-center gap-1.5 font-mono text-xs text-slate-400">
+          <span className="break-all">{machineCode}</span>
+          <CopyButton text={machineCode} />
+        </span>
+      }
+      size="xl"
+    >
+      <div className="space-y-6">
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-sm text-slate-500">
+            正在加载单机使用数据...
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/5 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 text-slate-400" />
-          </button>
-        </div>
-
-        <div className="overflow-y-auto p-6 space-y-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-16 text-slate-500">
-              加载中...
-            </div>
-          ) : detail ? (
-            <>
-              {detail.daily_usage.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-slate-300 mb-3">每日使用时长</h4>
+        ) : detail ? (
+          <>
+            {detail.daily_usage.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-slate-200 mb-3">每日使用时长分布</h4>
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 sm:p-4">
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart
                       data={[...detail.daily_usage].reverse()}
@@ -74,7 +71,7 @@ export default function MachineDetailModal({ machineCode, detail, loading, onClo
                       />
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: '#1e293b',
+                          backgroundColor: '#0f172a',
                           border: '1px solid rgba(255,255,255,0.1)',
                           borderRadius: '12px',
                           fontSize: '13px',
@@ -83,88 +80,91 @@ export default function MachineDetailModal({ machineCode, detail, loading, onClo
                         formatter={(value) => [formatDuration(value as number), '使用时长']}
                         labelFormatter={(label) => `日期: ${label}`}
                       />
-                      <Bar dataKey="duration_minutes" name="使用时长(分钟)" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                      <Bar
+                        dataKey="duration_minutes"
+                        name="使用时长(分钟)"
+                        fill="#8b5cf6"
+                        radius={[4, 4, 0, 0]}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-              )}
+              </div>
+            )}
 
+            <div>
+              <h4 className="text-sm font-medium text-slate-200 mb-3">每日活跃明细</h4>
+              <div className="overflow-x-auto rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+                <table className="w-full text-xs sm:text-sm whitespace-nowrap tabular-nums">
+                  <thead>
+                    <tr className="border-b border-white/[0.06] bg-white/[0.02] text-left text-slate-400">
+                      <th className="px-4 py-2.5 font-medium">日期</th>
+                      <th className="px-4 py-2.5 font-medium">请求数</th>
+                      <th className="px-4 py-2.5 font-medium">首次活跃</th>
+                      <th className="px-4 py-2.5 font-medium">末次活跃</th>
+                      <th className="px-4 py-2.5 font-medium">估算时长</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.05]">
+                    {detail.daily_usage.map((d) => (
+                      <tr
+                        key={d.date}
+                        className="transition-colors hover:bg-white/[0.02]"
+                      >
+                        <td className="px-4 py-2.5 text-slate-200 font-medium">{d.date}</td>
+                        <td className="px-4 py-2.5 text-slate-300">{d.requests}</td>
+                        <td className="px-4 py-2.5 text-slate-400">{formatTime(d.first_active)}</td>
+                        <td className="px-4 py-2.5 text-slate-400">{formatTime(d.last_active)}</td>
+                        <td className="px-4 py-2.5 font-medium text-violet-300">
+                          {formatDuration(d.duration_minutes)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {detail.cdks.length > 0 && (
               <div>
-                <h4 className="text-sm font-medium text-slate-300 mb-3">每日明细</h4>
-                <div className="overflow-x-auto border border-white/5 rounded-xl">
-                  <table className="w-full text-sm whitespace-nowrap">
+                <h4 className="text-sm font-medium text-slate-200 mb-3">该设备关联激活码</h4>
+                <div className="overflow-x-auto rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+                  <table className="w-full text-xs sm:text-sm whitespace-nowrap tabular-nums">
                     <thead>
-                      <tr className="border-b border-white/5 bg-white/[0.02]">
-                        <th className="text-left px-4 py-2.5 font-medium text-slate-400">日期</th>
-                        <th className="text-left px-4 py-2.5 font-medium text-slate-400">请求数</th>
-                        <th className="text-left px-4 py-2.5 font-medium text-slate-400">首次活跃</th>
-                        <th className="text-left px-4 py-2.5 font-medium text-slate-400">末次活跃</th>
-                        <th className="text-left px-4 py-2.5 font-medium text-slate-400">使用时长</th>
+                      <tr className="border-b border-white/[0.06] bg-white/[0.02] text-left text-slate-400">
+                        <th className="px-4 py-2.5 font-medium">CDK 码</th>
+                        <th className="px-4 py-2.5 font-medium">请求数</th>
+                        <th className="px-4 py-2.5 font-medium">最后使用时间</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {detail.daily_usage.map((d) => (
+                    <tbody className="divide-y divide-white/[0.05]">
+                      {detail.cdks.map((c) => (
                         <tr
-                          key={d.date}
-                          className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                          key={c.code}
+                          className="transition-colors hover:bg-white/[0.02]"
                         >
-                          <td className="px-4 py-2.5 text-slate-300 font-medium">{d.date}</td>
-                          <td className="px-4 py-2.5 text-slate-400">{d.requests}</td>
-                          <td className="px-4 py-2.5 text-slate-400">{formatTime(d.first_active)}</td>
-                          <td className="px-4 py-2.5 text-slate-400">{formatTime(d.last_active)}</td>
                           <td className="px-4 py-2.5">
-                            <span className="text-violet-400 font-medium">
-                              {formatDuration(d.duration_minutes)}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <code className="font-mono text-slate-200 text-xs">{c.code}</code>
+                              <CopyButton text={c.code} />
+                            </div>
                           </td>
+                          <td className="px-4 py-2.5 text-slate-300">{c.requests}</td>
+                          <td className="px-4 py-2.5 text-slate-400">{formatDate(c.last_used)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               </div>
-
-              {detail.cdks.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-slate-300 mb-3">关联激活码</h4>
-                  <div className="overflow-x-auto border border-white/5 rounded-xl">
-                    <table className="w-full text-sm whitespace-nowrap">
-                      <thead>
-                        <tr className="border-b border-white/5 bg-white/[0.02]">
-                          <th className="text-left px-4 py-2.5 font-medium text-slate-400">CDK 码</th>
-                          <th className="text-left px-4 py-2.5 font-medium text-slate-400">请求数</th>
-                          <th className="text-left px-4 py-2.5 font-medium text-slate-400">最后使用</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detail.cdks.map((c) => (
-                          <tr
-                            key={c.code}
-                            className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
-                          >
-                            <td className="px-4 py-2.5">
-                              <div className="flex items-center gap-1">
-                                <code className="font-mono text-slate-300 text-xs">{c.code}</code>
-                                <CopyButton text={c.code} />
-                              </div>
-                            </td>
-                            <td className="px-4 py-2.5 text-slate-400">{c.requests}</td>
-                            <td className="px-4 py-2.5 text-slate-400">{formatDate(c.last_used)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="flex items-center justify-center py-16 text-slate-500">
-              暂无数据
-            </div>
-          )}
-        </div>
+            )}
+          </>
+        ) : (
+          <div className="flex items-center justify-center py-16 text-sm text-slate-500">
+            暂无该设备明细数据
+          </div>
+        )}
       </div>
-    </div>
+    </ResponsiveModal>
   );
 }
