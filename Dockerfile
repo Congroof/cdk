@@ -22,10 +22,10 @@ RUN touch backend/src/main.rs && cd backend && cargo build --release
 FROM node:20-bookworm AS frontend-builder
 WORKDIR /build
 
-RUN npm config set registry https://registry.npmmirror.com
+RUN npm config set registry https://mirrors.cloud.tencent.com/npm/
 
 COPY frontend/package.json frontend/package-lock.json ./
-RUN sed -i 's|https://registry.npmjs.org|https://registry.npmmirror.com|g' package-lock.json && npm ci
+RUN sed -i 's|https://registry.npmjs.org|https://mirrors.cloud.tencent.com/npm|g' package-lock.json && npm ci
 COPY frontend/ .
 RUN npm run build
 
