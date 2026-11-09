@@ -1,8 +1,15 @@
 backend/target
 frontend/node_modules
 frontend/dist
+skinforge-updates/
+deploy/*.tar.gz
+*.tar.gz
+*.sql.gz
+*.bak
+.env
 .trellis/
 .cursor/
+.agent/
 .agents/
 .codex/
 .git/
