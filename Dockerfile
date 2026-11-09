@@ -25,7 +25,7 @@ WORKDIR /build
 RUN npm config set registry https://registry.npmmirror.com
 
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN sed -i 's|https://registry.npmjs.org|https://registry.npmmirror.com|g' package-lock.json && npm ci
 COPY frontend/ .
 RUN npm run build
 
