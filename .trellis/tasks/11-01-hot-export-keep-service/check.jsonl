@@ -1,0 +1,2 @@
+{"file": ".trellis/tasks/11-01-hot-export-keep-service/research/hot-export.md", "reason": "Check that export no longer stops the service and still documents the point-in-time snapshot limit."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Confirm the change does not alter startup migration behavior or import-time schema bootstrap."}

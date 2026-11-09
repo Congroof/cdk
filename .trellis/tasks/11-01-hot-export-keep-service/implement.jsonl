@@ -1,0 +1,2 @@
+{"file": ".trellis/tasks/11-01-hot-export-keep-service/research/hot-export.md", "reason": "Why InnoDB --single-transaction export can run while cdk-server stays up, and what the snapshot does not include."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Schema changes run at application startup. Export must not restart the app, so a live dump should only see normal DML."}
