@@ -15,6 +15,19 @@
 
 ## 快速开始
 
+### 方式一：本地一键启动（推荐）
+
+确保本地已安装 Docker、Rust (`cargo`) 与 Node.js，在项目根目录直接执行：
+
+```bash
+make dev
+```
+
+会自动启动本地 MySQL 容器、同步表结构与默认管理员账号（`admin` / `C%ht$n9*2FrkG0`），并同时拉起 Rust 后端（`http://127.0.0.1:3000`）与 Vite 前端（`http://localhost:5173`）。停止服务可执行 `make stop`，重置本地管理员密码可执行 `make reset-admin`。
+
+---
+
+### 方式二：手动分步启动
 
 ### 1. 准备 MySQL 数据库
 
@@ -143,6 +156,35 @@ curl -X POST http://localhost:3000/api/cdk/disable \
 | `disabled` | 已禁用（管理员手动禁用） |
 
 ## 生产部署
+
+### Docker 部署与运维更新
+
+#### 1. 全量部署 / 更新前后端（会重启后端容器）
+
+```bash
+git pull
+docker compose up -d --build   # 旧版可使用 docker-compose up -d --build
+```
+
+#### 2. 仅更新前端静态资源（零停机热更新，不断开在线客户端连接）
+
+当仅修改了 `frontend/` 前端代码而未改动 `backend/` 后端时，可只编译前端构建阶段并将产物热替换进正在运行的 `cdk-server` 容器 `/var/www/html/`，全程不重启容器、不断开客户端 WebSocket：
+
+```bash
+git pull && \
+docker build --target frontend-builder -t cdk-frontend-builder . && \
+CID=$(docker compose ps -q cdk-server 2>/dev/null || docker-compose ps -q cdk-server) && \
+TMP_ID=$(docker create cdk-frontend-builder) && \
+rm -rf /tmp/cdk-dist && docker cp "$TMP_ID:/build/dist" /tmp/cdk-dist && \
+docker rm "$TMP_ID" && \
+docker cp /tmp/cdk-dist/. "$CID:/var/www/html/" && \
+rm -rf /tmp/cdk-dist && \
+echo "✅ 前端零停机热更新完成！"
+```
+
+---
+
+### 宿主机 Nginx 反向代理示例
 
 建议使用 Nginx 反向代理：
 
